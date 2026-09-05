@@ -1,0 +1,34 @@
+bot:
+  token: ${BOT_TOKEN}
+  username: ${BOT_USERNAME:konyaevo_tver_helper_bot}
+
+schedule:
+  spreadsheet:
+    id: 1IUU0k0st5qsU3sFBfl8wazscE7R6_XHSAlsdJCwUa_4
+  sheet:
+    gids: 0,1172625755,254196325,2041886067
+    names: 1 курс,2 курс,3 курс,4 курс
+  refresh:
+    interval: 900000
+
+changes:
+  spreadsheet:
+    id: 1OpDaApQYxlwF9tYmzKbIr_zBt9AO-67aRqKKQXFyU7Q
+  sheet:
+    gid: 0
+  refresh:
+    interval: 600000
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./data/konyaevo-bot}
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+logging:
+  level:
+    dev.ix1ax: INFO
