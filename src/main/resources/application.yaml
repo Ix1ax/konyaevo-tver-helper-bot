@@ -1,6 +1,7 @@
 bot:
   token: ${BOT_TOKEN}
   username: ${BOT_USERNAME:konyaevo_tver_helper_bot}
+  base-url: ${BOT_BASE_URL:https://api.telegram.org/bot}
 
 schedule:
   spreadsheet:

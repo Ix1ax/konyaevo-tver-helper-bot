@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -28,13 +29,30 @@ public class KonyaevoBot extends TelegramLongPollingBot {
     private final MessageSender messageSender;
 
     public KonyaevoBot(@Value("${bot.token}") String botToken,
+                       @Value("${bot.base-url:https://api.telegram.org/bot}") String baseUrl,
                        ScheduleService scheduleService,
                        CallbackRouter callbackRouter,
                        MessageSender messageSender) {
-        super(botToken);
+        super(createBotOptions(baseUrl), botToken);
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
+    }
+
+    private static DefaultBotOptions createBotOptions(String baseUrl) {
+        DefaultBotOptions options = new DefaultBotOptions();
+        if (baseUrl != null && !baseUrl.isBlank()) {
+            String trimmed = baseUrl.trim();
+            if (trimmed.endsWith("/")) {
+                trimmed = trimmed.substring(0, trimmed.length() - 1);
+            }
+            if (!trimmed.endsWith("/bot")) {
+                trimmed = trimmed + "/bot";
+            }
+            options.setBaseUrl(trimmed);
+            log.info("[BOT CONFIG] Using Telegram base URL: {}", trimmed);
+        }
+        return options;
     }
 
     @PostConstruct
