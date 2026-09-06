@@ -39,6 +39,15 @@ public class KonyaevoBot extends TelegramLongPollingBot {
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
+
+        // AbsSender has captured the fast senderConfig (5s socket timeout) from createBotOptions().
+        // Now set pollingConfig (25s socket timeout) for DefaultBotSession long polling (15s getUpdates):
+        RequestConfig pollingConfig = RequestConfig.custom()
+                .setConnectTimeout(6000)
+                .setSocketTimeout(25000)
+                .setConnectionRequestTimeout(6000)
+                .build();
+        getOptions().setRequestConfig(pollingConfig);
     }
 
     private static DefaultBotOptions createBotOptions(String baseUrl, int maxThreads) {
@@ -47,13 +56,14 @@ public class KonyaevoBot extends TelegramLongPollingBot {
         // Long polling timeout: 15 seconds (Telegram returns clean HTTP 200 [] on idle)
         options.setGetUpdatesTimeout(15);
 
-        // Socket timeout (30s) is larger than getUpdatesTimeout (15s), preventing premature timeouts
-        RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout(8000)
-                .setSocketTimeout(30000)
-                .setConnectionRequestTimeout(8000)
+        // Fast timeout for message sending / editing: 5s socket timeout
+        // Normal Telegram API responses take ~100ms. If it hangs, fail fast in 5s instead of 60s.
+        RequestConfig senderConfig = RequestConfig.custom()
+                .setConnectTimeout(4000)
+                .setSocketTimeout(5000)
+                .setConnectionRequestTimeout(4000)
                 .build();
-        options.setRequestConfig(requestConfig);
+        options.setRequestConfig(senderConfig);
 
         if (baseUrl != null && !baseUrl.isBlank()) {
             String trimmed = baseUrl.trim();
