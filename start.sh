@@ -19,11 +19,14 @@ fi
 echo "Starting Konyaevo Bot..."
 
 JAR_FILE=""
-if [ -f "target/konyaevo-bot-1.0.0.jar" ]; then
-    JAR_FILE="target/konyaevo-bot-1.0.0.jar"
-elif [ -f "konyaevo-bot-1.0.0.jar" ]; then
-    JAR_FILE="konyaevo-bot-1.0.0.jar"
-else
+for f in target/konyaevo-bot-*.jar konyaevo-bot-*.jar; do
+    if [ -f "$f" ] && [[ "$f" != *.original ]]; then
+        JAR_FILE="$f"
+        break
+    fi
+done
+
+if [ -z "$JAR_FILE" ]; then
     echo "ERROR: JAR file not found. Build the project first: ./mvnw clean package -DskipTests"
     exit 1
 fi

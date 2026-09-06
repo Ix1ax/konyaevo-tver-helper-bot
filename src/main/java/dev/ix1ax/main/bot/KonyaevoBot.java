@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.apache.http.client.config.RequestConfig;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
@@ -30,17 +31,27 @@ public class KonyaevoBot extends TelegramLongPollingBot {
 
     public KonyaevoBot(@Value("${bot.token}") String botToken,
                        @Value("${bot.base-url:https://api.telegram.org/bot}") String baseUrl,
+                       @Value("${bot.max-threads:16}") int maxThreads,
                        ScheduleService scheduleService,
                        CallbackRouter callbackRouter,
                        MessageSender messageSender) {
-        super(createBotOptions(baseUrl), botToken);
+        super(createBotOptions(baseUrl, maxThreads), botToken);
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
     }
 
-    private static DefaultBotOptions createBotOptions(String baseUrl) {
+    private static DefaultBotOptions createBotOptions(String baseUrl, int maxThreads) {
         DefaultBotOptions options = new DefaultBotOptions();
+        options.setMaxThreads(Math.max(4, maxThreads));
+
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(8000)
+                .setSocketTimeout(10000)
+                .setConnectionRequestTimeout(8000)
+                .build();
+        options.setRequestConfig(requestConfig);
+
         if (baseUrl != null && !baseUrl.isBlank()) {
             String trimmed = baseUrl.trim();
             if (trimmed.endsWith("/")) {
@@ -52,6 +63,7 @@ public class KonyaevoBot extends TelegramLongPollingBot {
             options.setBaseUrl(trimmed);
             log.info("[BOT CONFIG] Using Telegram base URL: {}", trimmed);
         }
+        log.info("[BOT CONFIG] Telegram executor thread pool size: {}", options.getMaxThreads());
         return options;
     }
 
