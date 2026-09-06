@@ -13,7 +13,7 @@
 
     <groupId>ru.konyaevo</groupId>
     <artifactId>konyaevo-bot</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <name>Konyaevo Schedule Bot</name>
     <description>Telegram bot for Konyaevo college schedule</description>
 

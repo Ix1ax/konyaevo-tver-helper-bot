@@ -44,10 +44,13 @@ public class KonyaevoBot extends TelegramLongPollingBot {
     private static DefaultBotOptions createBotOptions(String baseUrl, int maxThreads) {
         DefaultBotOptions options = new DefaultBotOptions();
         options.setMaxThreads(Math.max(4, maxThreads));
+        // Long polling timeout: 15 seconds (Telegram returns clean HTTP 200 [] on idle)
+        options.setGetUpdatesTimeout(15);
 
+        // Socket timeout (30s) is larger than getUpdatesTimeout (15s), preventing premature timeouts
         RequestConfig requestConfig = RequestConfig.custom()
                 .setConnectTimeout(8000)
-                .setSocketTimeout(10000)
+                .setSocketTimeout(30000)
                 .setConnectionRequestTimeout(8000)
                 .build();
         options.setRequestConfig(requestConfig);
