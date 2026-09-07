@@ -32,10 +32,13 @@ public class KonyaevoBot extends TelegramLongPollingBot {
     public KonyaevoBot(@Value("${bot.token}") String botToken,
                        @Value("${bot.base-url:https://api.telegram.org/bot}") String baseUrl,
                        @Value("${bot.max-threads:16}") int maxThreads,
+                       @Value("${bot.proxy.type:NO_PROXY}") String proxyType,
+                       @Value("${bot.proxy.host:127.0.0.1}") String proxyHost,
+                       @Value("${bot.proxy.port:10808}") int proxyPort,
                        ScheduleService scheduleService,
                        CallbackRouter callbackRouter,
                        MessageSender messageSender) {
-        super(createBotOptions(baseUrl, maxThreads), botToken);
+        super(createBotOptions(baseUrl, maxThreads, proxyType, proxyHost, proxyPort), botToken);
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
@@ -50,7 +53,8 @@ public class KonyaevoBot extends TelegramLongPollingBot {
         getOptions().setRequestConfig(pollingConfig);
     }
 
-    private static DefaultBotOptions createBotOptions(String baseUrl, int maxThreads) {
+    private static DefaultBotOptions createBotOptions(String baseUrl, int maxThreads,
+                                                     String proxyType, String proxyHost, int proxyPort) {
         DefaultBotOptions options = new DefaultBotOptions();
         options.setMaxThreads(Math.max(4, maxThreads));
         // Long polling timeout: 15 seconds (Telegram returns clean HTTP 200 [] on idle)
@@ -64,6 +68,20 @@ public class KonyaevoBot extends TelegramLongPollingBot {
                 .setConnectionRequestTimeout(4000)
                 .build();
         options.setRequestConfig(senderConfig);
+
+        // Proxy configuration (e.g. SOCKS5 via local Xray / Happ daemon)
+        if (proxyType != null && !proxyType.equalsIgnoreCase("NO_PROXY") && !proxyType.isBlank()) {
+            if ("SOCKS5".equalsIgnoreCase(proxyType.trim())) {
+                options.setProxyType(DefaultBotOptions.ProxyType.SOCKS5);
+            } else if ("HTTP".equalsIgnoreCase(proxyType.trim())) {
+                options.setProxyType(DefaultBotOptions.ProxyType.HTTP);
+            } else if ("SOCKS4".equalsIgnoreCase(proxyType.trim())) {
+                options.setProxyType(DefaultBotOptions.ProxyType.SOCKS4);
+            }
+            options.setProxyHost(proxyHost != null ? proxyHost.trim() : "127.0.0.1");
+            options.setProxyPort(proxyPort > 0 ? proxyPort : 10808);
+            log.info("[BOT CONFIG] Using {} proxy: {}:{}", options.getProxyType(), options.getProxyHost(), options.getProxyPort());
+        }
 
         if (baseUrl != null && !baseUrl.isBlank()) {
             String trimmed = baseUrl.trim();

@@ -3,6 +3,10 @@ bot:
   username: ${BOT_USERNAME:konyaevo_tver_helper_bot}
   base-url: ${BOT_BASE_URL:https://api.telegram.org/bot}
   max-threads: ${BOT_MAX_THREADS:16}
+  proxy:
+    type: ${BOT_PROXY_TYPE:NO_PROXY}
+    host: ${BOT_PROXY_HOST:127.0.0.1}
+    port: ${BOT_PROXY_PORT:10808}
 
 schedule:
   spreadsheet:
@@ -34,3 +38,4 @@ spring:
 logging:
   level:
     dev.ix1ax: INFO
+    org.telegram.telegrambots.updatesreceivers.DefaultBotSession: WARN

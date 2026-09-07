@@ -10,10 +10,15 @@ if [ ! -f .env ]; then
         echo "Created .env from .env.example. Please edit it with your BOT_TOKEN and restart."
         exit 1
     else
-        echo "BOT_TOKEN=" > .env
-        echo "Created empty .env. Please add your BOT_TOKEN and restart."
         exit 1
     fi
+fi
+
+# Load .env variables if present
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
 fi
 
 echo "Starting Konyaevo Bot..."
