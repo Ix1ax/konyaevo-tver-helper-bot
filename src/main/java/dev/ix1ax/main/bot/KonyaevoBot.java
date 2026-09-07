@@ -28,6 +28,7 @@ public class KonyaevoBot extends TelegramLongPollingBot {
     private final ScheduleService scheduleService;
     private final CallbackRouter callbackRouter;
     private final MessageSender messageSender;
+    private final dev.ix1ax.main.service.AdminService adminService;
 
     public KonyaevoBot(@Value("${bot.token}") String botToken,
                        @Value("${bot.base-url:https://api.telegram.org/bot}") String baseUrl,
@@ -37,11 +38,13 @@ public class KonyaevoBot extends TelegramLongPollingBot {
                        @Value("${bot.proxy.port:10808}") int proxyPort,
                        ScheduleService scheduleService,
                        CallbackRouter callbackRouter,
-                       MessageSender messageSender) {
+                       MessageSender messageSender,
+                       dev.ix1ax.main.service.AdminService adminService) {
         super(createBotOptions(baseUrl, maxThreads, proxyType, proxyHost, proxyPort), botToken);
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
+        this.adminService = adminService;
 
         // AbsSender has captured the fast senderConfig (5s socket timeout) from createBotOptions().
         // Now set pollingConfig (25s socket timeout) for DefaultBotSession long polling (15s getUpdates):
@@ -158,9 +161,64 @@ public class KonyaevoBot extends TelegramLongPollingBot {
 
         log.info("[USER MESSAGE] ChatId: {} ({}) sent text: '{}'", chatId, sender, text);
 
-        if (text != null && !text.isBlank()) {
-            sendMainMenu(chatId);
+        if (text == null || text.isBlank()) {
+            return;
         }
+
+        String trimmed = text.trim();
+
+        // Admin commands
+        if (adminService.isAdmin(chatId)) {
+            if (trimmed.equals("/admin")) {
+                callbackRouter.sendAdminMenu(chatId);
+                return;
+            }
+            if (trimmed.equals("/stats")) {
+                callbackRouter.sendAdminStats(chatId);
+                return;
+            }
+            if (trimmed.equals("/refresh")) {
+                callbackRouter.sendAdminRefresh(chatId);
+                return;
+            }
+            if (trimmed.equals("/broadcast")) {
+                String help = "📢 <b>Рассылка сообщений</b>\n\n" +
+                        "Используйте команду:\n" +
+                        "<code>/broadcast [текст сообщения]</code>\n\n" +
+                        "<i>Поддерживается HTML-разметка Telegram. Перед отправкой бот покажет предпросмотр сообщения и запросит подтверждение.</i>";
+                messageSender.sendDirectMessage(chatId, help, KeyboardFactory.buildAdminBackKeyboard());
+                return;
+            }
+            if (trimmed.startsWith("/broadcast ")) {
+                String broadcastContent = trimmed.substring("/broadcast ".length()).trim();
+                handleBroadcastDraft(chatId, broadcastContent);
+                return;
+            }
+        }
+
+        sendMainMenu(chatId);
+    }
+
+    private void handleBroadcastDraft(long chatId, String broadcastContent) {
+        if (broadcastContent.isBlank()) {
+            messageSender.sendDirectMessage(chatId,
+                    "⚠️ <i>Текст рассылки не может быть пустым.</i>",
+                    KeyboardFactory.buildAdminBackKeyboard());
+            return;
+        }
+
+        var draft = adminService.createDraft(chatId, broadcastContent);
+        long totalUsers = adminService.getTotalRecipients();
+
+        String preview = "📢 <b>Предпросмотр рассылки</b>\n\n" +
+                "──────────────────\n" +
+                broadcastContent + "\n" +
+                "──────────────────\n\n" +
+                "👥 Получателей в базе: <b>" + totalUsers + "</b>\n\n" +
+                "<i>Подтвердите отправку сообщения всем пользователям бота:</i>";
+
+        messageSender.sendDirectMessage(chatId, preview,
+                KeyboardFactory.buildBroadcastConfirmKeyboard(draft.id()));
     }
 
     private void handleCallback(Update update) {

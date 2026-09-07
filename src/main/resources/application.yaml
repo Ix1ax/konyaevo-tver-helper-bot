@@ -7,6 +7,7 @@ bot:
     type: ${BOT_PROXY_TYPE:NO_PROXY}
     host: ${BOT_PROXY_HOST:127.0.0.1}
     port: ${BOT_PROXY_PORT:10808}
+  admin-ids: ${BOT_ADMIN_IDS:1669683599}
 
 schedule:
   spreadsheet:

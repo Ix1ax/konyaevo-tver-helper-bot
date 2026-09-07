@@ -112,6 +112,38 @@ public final class KeyboardFactory {
         return new InlineKeyboardMarkup(rows);
     }
 
+    // ===== Admin keyboards =====
+
+    public static InlineKeyboardMarkup buildAdminKeyboard() {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        rows.add(List.of(
+                button("📊 Статистика", "admin:stats"),
+                button("🔄 Обновить кэш", "admin:refresh")
+        ));
+        rows.add(List.of(
+                button("📢 Сделать рассылку", "admin:broadcast_info")
+        ));
+        rows.add(List.of(
+                button("🚪 Закрыть", "admin:close")
+        ));
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    public static InlineKeyboardMarkup buildAdminBackKeyboard() {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        rows.add(List.of(button("‹ Назад в админку", "admin:menu")));
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    public static InlineKeyboardMarkup buildBroadcastConfirmKeyboard(String draftId) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        rows.add(List.of(
+                button("✅ Отправить всем", "admin:bc_send:" + draftId),
+                button("❌ Отменить", "admin:bc_cancel:" + draftId)
+        ));
+        return new InlineKeyboardMarkup(rows);
+    }
+
     // ===== Common =====
 
     public static InlineKeyboardMarkup buildBackKeyboard(String text, String callbackData) {

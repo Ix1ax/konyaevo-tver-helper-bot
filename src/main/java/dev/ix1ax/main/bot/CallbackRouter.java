@@ -19,10 +19,14 @@ public class CallbackRouter {
 
     private final ScheduleService scheduleService;
     private final MessageSender messageSender;
+    private final dev.ix1ax.main.service.AdminService adminService;
 
-    public CallbackRouter(ScheduleService scheduleService, MessageSender messageSender) {
+    public CallbackRouter(ScheduleService scheduleService,
+                          MessageSender messageSender,
+                          dev.ix1ax.main.service.AdminService adminService) {
         this.scheduleService = scheduleService;
         this.messageSender = messageSender;
+        this.adminService = adminService;
     }
 
     /**
@@ -43,6 +47,16 @@ public class CallbackRouter {
                 : "id:" + chatId;
 
         log.info("[USER CLICK] ChatId: {} ({}) clicked: '{}'", chatId, sender, data);
+
+        // ===== Admin flow =====
+        if (data.startsWith("admin:")) {
+            if (!adminService.isAdmin(chatId)) {
+                log.warn("[SECURITY] Non-admin chatId {} clicked admin callback: {}", chatId, data);
+                return;
+            }
+            handleAdminCallback(chatId, messageId, data);
+            return;
+        }
 
         // ===== Navigation =====
         if (data.equals("logout")) {
@@ -236,5 +250,96 @@ public class CallbackRouter {
                 "👨‍🏫 <b>" + teacherName + "</b>\n" +
                 "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
                 "Выберите действие:";
+    }
+
+    // ===== Admin screen handlers =====
+
+    private void handleAdminCallback(long chatId, int messageId, String data) {
+        if (data.equals("admin:menu")) {
+            showAdminMenu(chatId, messageId);
+        } else if (data.equals("admin:stats")) {
+            showAdminStats(chatId, messageId);
+        } else if (data.equals("admin:refresh")) {
+            handleAdminRefresh(chatId, messageId);
+        } else if (data.equals("admin:broadcast_info")) {
+            showBroadcastInfo(chatId, messageId);
+        } else if (data.startsWith("admin:bc_send:")) {
+            String draftId = data.substring("admin:bc_send:".length());
+            adminService.startBroadcast(draftId, messageId);
+        } else if (data.startsWith("admin:bc_cancel:")) {
+            String draftId = data.substring("admin:bc_cancel:".length());
+            adminService.removeDraft(draftId);
+            messageSender.editMessage(chatId, messageId,
+                    "❌ <i>Рассылка отменена.</i>",
+                    KeyboardFactory.buildAdminBackKeyboard());
+        } else if (data.equals("admin:close")) {
+            messageSender.editMessage(chatId, messageId,
+                    "🚪 <i>Панель администратора закрыта. Чтобы открыть её снова, отправьте команду /admin.</i>",
+                    null);
+        }
+    }
+
+    public void showAdminMenu(long chatId, int messageId) {
+        String text = "👑 <b>Панель администратора</b>\n\n" +
+                "Управление ботом Коняево:\n" +
+                "• Просмотр статистики и активности\n" +
+                "• Ручное обновление кэша расписания\n" +
+                "• Массовая рассылка сообщений";
+        messageSender.editMessage(chatId, messageId, text, KeyboardFactory.buildAdminKeyboard());
+    }
+
+    public void sendAdminMenu(long chatId) {
+        String text = "👑 <b>Панель администратора</b>\n\n" +
+                "Управление ботом Коняево:\n" +
+                "• Просмотр статистики и активности\n" +
+                "• Ручное обновление кэша расписания\n" +
+                "• Массовая рассылка сообщений";
+        messageSender.sendNewMessage(chatId, text, KeyboardFactory.buildAdminKeyboard(), "admin menu");
+    }
+
+    public void showAdminStats(long chatId, int messageId) {
+        String report = adminService.getStatsReport();
+        messageSender.editMessage(chatId, messageId, report, KeyboardFactory.buildAdminBackKeyboard());
+    }
+
+    public void sendAdminStats(long chatId) {
+        String report = adminService.getStatsReport();
+        messageSender.sendDirectMessage(chatId, report, KeyboardFactory.buildAdminBackKeyboard());
+    }
+
+    private void handleAdminRefresh(long chatId, int messageId) {
+        try {
+            adminService.refreshCache();
+            String text = "🔄 <b>Кэш успешно обновлён!</b>\n\n" +
+                    "📅 Расписание и замены повторно загружены из Google Таблиц.";
+            messageSender.editMessage(chatId, messageId, text, KeyboardFactory.buildAdminBackKeyboard());
+        } catch (Exception e) {
+            log.error("[ADMIN REFRESH ERROR]", e);
+            messageSender.editMessage(chatId, messageId,
+                    "⚠️ <b>Ошибка обновления кэша:</b> " + e.getMessage(),
+                    KeyboardFactory.buildAdminBackKeyboard());
+        }
+    }
+
+    public void sendAdminRefresh(long chatId) {
+        try {
+            adminService.refreshCache();
+            String text = "🔄 <b>Кэш успешно обновлён!</b>\n\n" +
+                    "📅 Расписание и замены повторно загружены из Google Таблиц.";
+            messageSender.sendDirectMessage(chatId, text, KeyboardFactory.buildAdminBackKeyboard());
+        } catch (Exception e) {
+            log.error("[ADMIN REFRESH ERROR]", e);
+            messageSender.sendDirectMessage(chatId,
+                    "⚠️ <b>Ошибка обновления кэша:</b> " + e.getMessage(),
+                    KeyboardFactory.buildAdminBackKeyboard());
+        }
+    }
+
+    private void showBroadcastInfo(long chatId, int messageId) {
+        String text = "📢 <b>Рассылка сообщений</b>\n\n" +
+                "Для запуска рассылки отправьте команду в чат:\n" +
+                "<code>/broadcast [текст сообщения]</code>\n\n" +
+                "<i>Поддерживается форматирование Telegram HTML (b, i, code, a). Перед фактической отправкой бот покажет предпросмотр и кнопки подтверждения.</i>";
+        messageSender.editMessage(chatId, messageId, text, KeyboardFactory.buildAdminBackKeyboard());
     }
 }

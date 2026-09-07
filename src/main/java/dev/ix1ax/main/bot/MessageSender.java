@@ -94,6 +94,55 @@ public class MessageSender {
         }
     }
 
+    public enum DirectSendResult {
+        SUCCESS,
+        BLOCKED,
+        RATE_LIMIT,
+        ERROR
+    }
+
+    /**
+     * Send a standalone message (e.g. broadcast or admin report) without modifying user settings session.
+     */
+    public DirectSendResult sendDirectMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
+        SendMessage msg = new SendMessage();
+        msg.setChatId(String.valueOf(chatId));
+        msg.setText(truncateIfNeeded(text));
+        msg.setParseMode("HTML");
+        if (keyboard != null) {
+            msg.setReplyMarkup(keyboard);
+        }
+
+        try {
+            bot.execute(msg);
+            return DirectSendResult.SUCCESS;
+        } catch (Exception e) {
+            if (TelegramErrorClassifier.isUserBlockedError(e)) {
+                return DirectSendResult.BLOCKED;
+            }
+            if (TelegramErrorClassifier.isRateLimitError(e)) {
+                return DirectSendResult.RATE_LIMIT;
+            }
+
+            // Try plain text fallback if HTML tags were unclosed/malformed
+            try {
+                msg.setParseMode(null);
+                msg.setText(text.replaceAll("<[^>]*>", ""));
+                bot.execute(msg);
+                return DirectSendResult.SUCCESS;
+            } catch (Exception ex2) {
+                if (TelegramErrorClassifier.isUserBlockedError(ex2)) {
+                    return DirectSendResult.BLOCKED;
+                }
+                if (TelegramErrorClassifier.isRateLimitError(ex2)) {
+                    return DirectSendResult.RATE_LIMIT;
+                }
+                log.warn("[DIRECT SEND ERROR] Failed for chatId {}: {}", chatId, ex2.getMessage());
+                return DirectSendResult.ERROR;
+            }
+        }
+    }
+
     // ===== Private helpers =====
 
     private void fallbackSendMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
