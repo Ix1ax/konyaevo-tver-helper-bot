@@ -149,7 +149,7 @@ public class CallbackRouter {
         String text = "🏛 <b>Коняево — Расписание</b>\n\n" +
                 "Тверской колледж им. А.Н. Коняева\n" +
                 "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
-                "Выберите, кто вы:";
+                "Выберите, кто Вы:";
         messageSender.editMessage(chatId, messageId, text, KeyboardFactory.buildRoleKeyboard());
     }
 
@@ -248,7 +248,7 @@ public class CallbackRouter {
         return "🏛 <b>Коняево — Расписание</b>\n\n" +
                 "Тверской колледж им. А.Н. Коняева\n" +
                 "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
-                "Выберите, кто вы:";
+                "Выберите, кто Вы:";
     }
 
     public String getStudentActionText(String groupName) {
@@ -291,18 +291,18 @@ public class CallbackRouter {
             sb.append("Каждый день в указанное время бот отправит\n");
             sb.append("свежие замены для ");
             if ("teacher".equals(user.getRole())) {
-                sb.append("вашего преподавателя.");
+                sb.append("Вас.");
             } else {
-                sb.append("вашей группы.");
+                sb.append("Вашей группы.");
             }
         } else {
             sb.append("Статус: ❌ <b>Выключены</b>\n\n");
             sb.append("Включите, чтобы каждый день получать\n");
             sb.append("свежие замены для ");
             if ("teacher".equals(user.getRole())) {
-                sb.append("вашего преподавателя.");
+                sb.append("Вас.");
             } else {
-                sb.append("вашей группы.");
+                sb.append("Вашей группы.");
             }
         }
 
@@ -323,7 +323,7 @@ public class CallbackRouter {
         scheduleService.saveUser(user);
 
         String text = "✅ <b>Уведомления включены!</b>\n\n" +
-                "⏰ Каждый день в <b>" + time + " (МСК)</b> вы будете\n" +
+                "⏰ Каждый день в <b>" + time + " (МСК)</b> Вы будете\n" +
                 "получать свежие замены пар.";
         String backCallback = getBackCallback(user);
         messageSender.editMessage(chatId, messageId, text,
@@ -383,7 +383,7 @@ public class CallbackRouter {
         scheduleService.saveUser(user);
 
         String resultText = "✅ <b>Уведомления включены!</b>\n\n" +
-                "⏰ Каждый день в <b>" + normalizedTime + " (МСК)</b> вы будете\n" +
+                "⏰ Каждый день в <b>" + normalizedTime + " (МСК)</b> Вы будете\n" +
                 "получать свежие замены пар.";
         String backCallback = getBackCallback(user);
 
