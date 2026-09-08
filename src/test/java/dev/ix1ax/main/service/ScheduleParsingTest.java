@@ -139,7 +139,8 @@ public class ScheduleParsingTest {
         Set<String> teachers = new TreeSet<>();
 
         org.apache.poi.ss.usermodel.DataFormatter df = new org.apache.poi.ss.usermodel.DataFormatter();
-        try (org.apache.poi.ss.usermodel.Workbook wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(file)) {
+        try (java.io.InputStream is = new java.io.FileInputStream(file);
+             org.apache.poi.ss.usermodel.Workbook wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(is)) {
             org.apache.poi.ss.usermodel.Sheet sheet = wb.getSheetAt(0); // 1 курс
 
             Method parseSheetMethod = ScheduleParserService.class.getDeclaredMethod(
@@ -251,7 +252,8 @@ public class ScheduleParsingTest {
 
         String[] names = {"1 курс", "2 курс", "3 курс", "4 курс"};
 
-        try (org.apache.poi.ss.usermodel.Workbook wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(file)) {
+        try (java.io.InputStream is = new java.io.FileInputStream(file);
+             org.apache.poi.ss.usermodel.Workbook wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(is)) {
             for (int i = 0; i < wb.getNumberOfSheets(); i++) {
                 org.apache.poi.ss.usermodel.Sheet sheet = wb.getSheetAt(i);
                 String courseName = i < names.length ? names[i] : sheet.getSheetName();

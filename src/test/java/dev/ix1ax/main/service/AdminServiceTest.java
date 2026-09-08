@@ -99,6 +99,8 @@ public class AdminServiceTest {
         @Override public long countByCourse(Integer course) { return 0; }
         @Override public List<Long> findAllChatIds() { return List.of(1669683599L); }
         @Override public List<Object[]> findTopGroups(Pageable pageable) { return Collections.emptyList(); }
+        @Override public List<UserSettings> findByNotifyEnabledTrueAndNotifyTime(String time) { return Collections.emptyList(); }
+        @Override public long countByNotifyEnabledTrue() { return 0; }
 
         @Override public void flush() {}
         @Override public <S extends UserSettings> S saveAndFlush(S entity) { return entity; }

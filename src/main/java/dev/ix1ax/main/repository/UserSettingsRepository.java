@@ -20,4 +20,8 @@ public interface UserSettingsRepository extends JpaRepository<UserSettings, Long
            "WHERE u.groupName IS NOT NULL AND u.groupName <> '' " +
            "GROUP BY u.groupName ORDER BY cnt DESC")
     List<Object[]> findTopGroups(Pageable pageable);
+
+    List<UserSettings> findByNotifyEnabledTrueAndNotifyTime(String time);
+
+    long countByNotifyEnabledTrue();
 }

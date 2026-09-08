@@ -66,6 +66,7 @@ public final class KeyboardFactory {
                 button("🗓 Вся неделя", "s_week:" + groupName),
                 button("⚡️ Изменения", "s_changes:" + groupName)
         ));
+        rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
         rows.add(List.of(button("🚪 Сменить группу", "logout")));
         return new InlineKeyboardMarkup(rows);
     }
@@ -108,6 +109,7 @@ public final class KeyboardFactory {
                 button("🗓 Вся неделя", "t_week:" + teacherName),
                 button("⚡️ Изменения", "t_changes:" + teacherName)
         ));
+        rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
         rows.add(List.of(button("🚪 Сменить преподавателя", "logout")));
         return new InlineKeyboardMarkup(rows);
     }
@@ -141,6 +143,48 @@ public final class KeyboardFactory {
                 button("✅ Отправить всем", "admin:bc_send:" + draftId),
                 button("❌ Отменить", "admin:bc_cancel:" + draftId)
         ));
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    // ===== Notification keyboards =====
+
+    /**
+     * Notification settings screen with current status.
+     */
+    public static InlineKeyboardMarkup buildNotifySettingsKeyboard(boolean enabled, String backCallback) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        if (enabled) {
+            rows.add(List.of(button("⏰ Изменить время", "notify:change_time")));
+            rows.add(List.of(button("🔕 Выключить", "notify:disable")));
+        } else {
+            rows.add(List.of(button("🔔 Включить", "notify:enable")));
+        }
+        rows.add(List.of(button("‹ Назад", backCallback)));
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    /**
+     * Time picker with preset times + custom input option.
+     */
+    public static InlineKeyboardMarkup buildTimePickerKeyboard(String backCallback) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        rows.add(List.of(
+                button("06:00", "notify:time:06:00"),
+                button("07:00", "notify:time:07:00"),
+                button("07:30", "notify:time:07:30")
+        ));
+        rows.add(List.of(
+                button("08:00", "notify:time:08:00"),
+                button("08:30", "notify:time:08:30"),
+                button("12:00", "notify:time:12:00")
+        ));
+        rows.add(List.of(
+                button("18:00", "notify:time:18:00"),
+                button("20:00", "notify:time:20:00"),
+                button("21:00", "notify:time:21:00")
+        ));
+        rows.add(List.of(button("⌨️ Ввести своё время", "notify:custom_time")));
+        rows.add(List.of(button("‹ Назад", backCallback)));
         return new InlineKeyboardMarkup(rows);
     }
 

@@ -196,6 +196,13 @@ public class KonyaevoBot extends TelegramLongPollingBot {
             }
         }
 
+        // Check if user is entering a custom notification time (e.g. "07:30", "17:53")
+        if (trimmed.matches("^\\d{1,2}:\\d{2}$")) {
+            if (callbackRouter.handleCustomTimeInput(chatId, trimmed)) {
+                return;
+            }
+        }
+
         sendMainMenu(chatId);
     }
 

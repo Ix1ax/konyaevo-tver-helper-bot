@@ -114,6 +114,19 @@ public class CallbackRouter {
         } else if (data.startsWith("t_changes:")) {
             showChanges(chatId, messageId, data.substring("t_changes:".length()), true);
 
+        // ===== Notification flow =====
+        } else if (data.equals("notify:settings")) {
+            showNotifySettings(chatId, messageId, user);
+        } else if (data.equals("notify:enable") || data.equals("notify:change_time")) {
+            showTimePicker(chatId, messageId, user);
+        } else if (data.equals("notify:disable")) {
+            disableNotifications(chatId, messageId, user);
+        } else if (data.startsWith("notify:time:")) {
+            String time = data.substring("notify:time:".length());
+            enableNotifications(chatId, messageId, user, time);
+        } else if (data.equals("notify:custom_time")) {
+            promptCustomTime(chatId, messageId, user);
+
         // ===== Back navigation =====
         } else if (data.equals("back:courses")) {
             showCourseSelection(chatId, messageId);
@@ -250,6 +263,135 @@ public class CallbackRouter {
                 "👨‍🏫 <b>" + teacherName + "</b>\n" +
                 "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
                 "Выберите действие:";
+    }
+
+    // ===== Notification screen handlers =====
+
+    private String getBackCallback(UserSettings user) {
+        if ("teacher".equals(user.getRole()) && user.getTeacherName() != null) {
+            return "back:tactions:" + user.getTeacherName();
+        }
+        if ("student".equals(user.getRole()) && user.getGroupName() != null) {
+            return "back:sactions:" + user.getGroupName();
+        }
+        return "main";
+    }
+
+    private void showNotifySettings(long chatId, int messageId, UserSettings user) {
+        boolean enabled = Boolean.TRUE.equals(user.getNotifyEnabled());
+        String time = user.getNotifyTime();
+        String backCallback = getBackCallback(user);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("🔔 <b>Уведомления об изменениях</b>\n\n");
+
+        if (enabled && time != null) {
+            sb.append("Статус: ✅ <b>Включены</b>\n");
+            sb.append("⏰ Время отправки: <b>").append(time).append(" (МСК)</b>\n\n");
+            sb.append("Каждый день в указанное время бот отправит\n");
+            sb.append("свежие замены для ");
+            if ("teacher".equals(user.getRole())) {
+                sb.append("вашего преподавателя.");
+            } else {
+                sb.append("вашей группы.");
+            }
+        } else {
+            sb.append("Статус: ❌ <b>Выключены</b>\n\n");
+            sb.append("Включите, чтобы каждый день получать\n");
+            sb.append("свежие замены для ");
+            if ("teacher".equals(user.getRole())) {
+                sb.append("вашего преподавателя.");
+            } else {
+                sb.append("вашей группы.");
+            }
+        }
+
+        messageSender.editMessage(chatId, messageId, sb.toString(),
+                KeyboardFactory.buildNotifySettingsKeyboard(enabled, backCallback));
+    }
+
+    private void showTimePicker(long chatId, int messageId, UserSettings user) {
+        String text = "⏰ <b>Выберите время уведомлений (МСК):</b>\n\n" +
+                "Нажмите на готовое время или введите своё.";
+        messageSender.editMessage(chatId, messageId, text,
+                KeyboardFactory.buildTimePickerKeyboard("notify:settings"));
+    }
+
+    private void enableNotifications(long chatId, int messageId, UserSettings user, String time) {
+        user.setNotifyEnabled(true);
+        user.setNotifyTime(time);
+        scheduleService.saveUser(user);
+
+        String text = "✅ <b>Уведомления включены!</b>\n\n" +
+                "⏰ Каждый день в <b>" + time + " (МСК)</b> вы будете\n" +
+                "получать свежие замены пар.";
+        String backCallback = getBackCallback(user);
+        messageSender.editMessage(chatId, messageId, text,
+                KeyboardFactory.buildNotifySettingsKeyboard(true, backCallback));
+    }
+
+    private void disableNotifications(long chatId, int messageId, UserSettings user) {
+        user.setNotifyEnabled(false);
+        scheduleService.saveUser(user);
+
+        String text = "🔕 <b>Уведомления выключены</b>\n\n" +
+                "Вы больше не будете получать ежедневные замены.\n" +
+                "Включить обратно можно в любой момент.";
+        String backCallback = getBackCallback(user);
+        messageSender.editMessage(chatId, messageId, text,
+                KeyboardFactory.buildNotifySettingsKeyboard(false, backCallback));
+    }
+
+    private void promptCustomTime(long chatId, int messageId, UserSettings user) {
+        String text = "⌨️ <b>Введите время в формате ЧЧ:ММ</b>\n\n" +
+                "Например: <code>07:30</code> или <code>17:53</code>\n\n" +
+                "Отправьте время сообщением в чат.";
+        messageSender.editMessage(chatId, messageId, text,
+                KeyboardFactory.buildBackKeyboard("‹ Назад", "notify:settings"));
+    }
+
+    /**
+     * Called from KonyaevoBot when user types a time like "07:30".
+     * Returns true if time was valid and saved, false otherwise.
+     */
+    public boolean handleCustomTimeInput(long chatId, String text) {
+        String trimmed = text.trim();
+
+        // Validate HH:MM format
+        if (!trimmed.matches("^\\d{1,2}:\\d{2}$")) {
+            return false;
+        }
+
+        String[] parts = trimmed.split(":");
+        int hour = Integer.parseInt(parts[0]);
+        int minute = Integer.parseInt(parts[1]);
+
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            return false;
+        }
+
+        // Normalize to HH:mm
+        String normalizedTime = String.format("%02d:%02d", hour, minute);
+
+        UserSettings user = scheduleService.getOrCreateUser(chatId);
+        if (user.getRole() == null || (user.getGroupName() == null && user.getTeacherName() == null)) {
+            return false; // User hasn't completed setup
+        }
+
+        user.setNotifyEnabled(true);
+        user.setNotifyTime(normalizedTime);
+        scheduleService.saveUser(user);
+
+        String resultText = "✅ <b>Уведомления включены!</b>\n\n" +
+                "⏰ Каждый день в <b>" + normalizedTime + " (МСК)</b> вы будете\n" +
+                "получать свежие замены пар.";
+        String backCallback = getBackCallback(user);
+
+        messageSender.sendNewMessage(chatId, resultText,
+                KeyboardFactory.buildNotifySettingsKeyboard(true, backCallback),
+                "custom notify time confirmation");
+
+        return true;
     }
 
     // ===== Admin screen handlers =====

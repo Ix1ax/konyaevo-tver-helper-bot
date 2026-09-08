@@ -100,4 +100,32 @@ public class UserSettings {
     public void setTeacherName(String teacherName) {
         this.teacherName = teacherName;
     }
+
+    /**
+     * Whether daily change notifications are enabled for this user.
+     */
+    @Column(name = "notify_enabled")
+    private Boolean notifyEnabled = false;
+
+    /**
+     * Time of day to send notifications, format "HH:mm" in Moscow timezone.
+     */
+    @Column(name = "notify_time")
+    private String notifyTime;
+
+    public Boolean getNotifyEnabled() {
+        return notifyEnabled;
+    }
+
+    public void setNotifyEnabled(Boolean notifyEnabled) {
+        this.notifyEnabled = notifyEnabled;
+    }
+
+    public String getNotifyTime() {
+        return notifyTime;
+    }
+
+    public void setNotifyTime(String notifyTime) {
+        this.notifyTime = notifyTime;
+    }
 }

@@ -80,6 +80,7 @@ public class AdminService {
         long totalUsers = userSettingsRepo.count();
         long studentCount = userSettingsRepo.countByRole("student");
         long teacherCount = userSettingsRepo.countByRole("teacher");
+        long notifyCount = userSettingsRepo.countByNotifyEnabledTrue();
         long unconfiguredCount = Math.max(0, totalUsers - studentCount - teacherCount);
 
         long course1 = userSettingsRepo.countByCourse(1);
@@ -106,6 +107,7 @@ public class AdminService {
         sb.append(" • Всего в базе: <b>").append(totalUsers).append("</b>\n");
         sb.append(" • Студенты: <b>").append(studentCount).append("</b>\n");
         sb.append(" • Преподаватели: <b>").append(teacherCount).append("</b>\n");
+        sb.append(" • С уведомлениями: <b>").append(notifyCount).append("</b>\n");
         if (unconfiguredCount > 0) {
             sb.append(" • В процессе выбора: <b>").append(unconfiguredCount).append("</b>\n");
         }
