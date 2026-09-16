@@ -177,6 +177,7 @@ public class ScheduleParserService {
                        Map<String, Map<String, DaySchedule>> scheduleMap,
                        Map<String, List<String>> groupsMap,
                        Set<String> teachers) {
+        Map<String, String> pictureWeekMap = extractPictureWeekMap(sheet);
         DataFormatter df = new DataFormatter();
         Row headerRow = sheet.getRow(0);
         if (headerRow == null) return;
@@ -268,6 +269,9 @@ public class ScheduleParserService {
                         ? sCell.getCellStyle().getVerticalAlignment()
                         : VerticalAlignment.CENTER;
 
+                String cellKey = r + "," + subjectCol;
+                String picWeek = pictureWeekMap.get(cellKey);
+
                 for (int e = 0; e < entryCount; e++) {
                     ParsedCell.Entry entry = parsed.entries.get(e);
                     if (entry.teacher != null && !entry.teacher.isBlank()) {
@@ -288,10 +292,20 @@ public class ScheduleParserService {
                     if (entryCount == 2) {
                         weekType = (e == 0) ? Lesson.WEEK_RED : Lesson.WEEK_BLUE;
                     } else if (entryCount == 1) {
-                        if (vAlign == VerticalAlignment.TOP) {
+                        if (Lesson.WEEK_RED.equals(picWeek) || Lesson.WEEK_BLUE.equals(picWeek)) {
+                            weekType = picWeek;
+                        } else if (vAlign == VerticalAlignment.TOP) {
                             weekType = Lesson.WEEK_RED;
                         } else if (vAlign == VerticalAlignment.BOTTOM) {
                             weekType = Lesson.WEEK_BLUE;
+                        }
+                    }
+
+                    if (entryCount == 1 && !roomLines.isEmpty() && roomLines.size() > 1) {
+                        if (Lesson.WEEK_BLUE.equals(weekType)) {
+                            assignedRoom = roomLines.get(roomLines.size() - 1);
+                        } else if (Lesson.WEEK_RED.equals(weekType)) {
+                            assignedRoom = roomLines.get(0);
                         }
                     }
 
@@ -302,6 +316,74 @@ public class ScheduleParserService {
                 }
             }
         }
+    }
+
+    /**
+     * Extracts picture anchors (red and blue circles) overlaid on cells in the sheet.
+     * Returns a map of "row,col" -> weekType (WEEK_RED, WEEK_BLUE, or "both").
+     */
+    private Map<String, String> extractPictureWeekMap(Sheet sheet) {
+        Map<String, String> result = new HashMap<>();
+        if (!(sheet instanceof org.apache.poi.xssf.usermodel.XSSFSheet xssfSheet)) {
+            return result;
+        }
+
+        org.apache.poi.xssf.usermodel.XSSFDrawing drawing = xssfSheet.getDrawingPatriarch();
+        if (drawing == null) {
+            return result;
+        }
+
+        for (org.apache.poi.xssf.usermodel.XSSFShape shape : drawing.getShapes()) {
+            if (shape instanceof org.apache.poi.xssf.usermodel.XSSFPicture pic) {
+                org.apache.poi.xssf.usermodel.XSSFClientAnchor anchor = pic.getClientAnchor();
+                if (anchor == null) continue;
+                int row = anchor.getRow1();
+                int col = anchor.getCol1();
+
+                String weekType = detectPictureWeekType(pic.getPictureData());
+                if (weekType != null) {
+                    String key = row + "," + col;
+                    String existing = result.get(key);
+                    if (existing == null) {
+                        result.put(key, weekType);
+                    } else if (!existing.equals(weekType)) {
+                        result.put(key, "both");
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    private String detectPictureWeekType(org.apache.poi.xssf.usermodel.XSSFPictureData pData) {
+        if (pData == null) return null;
+        byte[] data = pData.getData();
+        if (data == null || data.length == 0) return null;
+
+        try {
+            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new ByteArrayInputStream(data));
+            if (img != null) {
+                int cx = img.getWidth() / 2;
+                int cy = img.getHeight() / 2;
+                int rgb = img.getRGB(cx, cy);
+                int r = (rgb >> 16) & 0xFF;
+                int b = rgb & 0xFF;
+                if (r > 150 && b < 100) {
+                    return Lesson.WEEK_RED;
+                }
+                if (b > 150 && r < 100) {
+                    return Lesson.WEEK_BLUE;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to read image with ImageIO: {}", e.getMessage());
+        }
+
+        // Fallback by exact byte length from Google Sheets export
+        if (data.length == 1052) return Lesson.WEEK_RED;
+        if (data.length == 1060) return Lesson.WEEK_BLUE;
+
+        return null;
     }
 
     private void fallbackParseCsv(String[] gids, String[] names,
