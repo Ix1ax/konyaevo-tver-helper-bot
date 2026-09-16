@@ -5,6 +5,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Factory for building Telegram inline keyboards.
@@ -155,11 +156,51 @@ public final class KeyboardFactory {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         if (enabled) {
             rows.add(List.of(button("⏰ Изменить время", "notify:change_time")));
+            rows.add(List.of(button("📅 Дни недели", "notify:days")));
             rows.add(List.of(button("🔕 Выключить", "notify:disable")));
         } else {
             rows.add(List.of(button("🔔 Включить", "notify:enable")));
+            rows.add(List.of(button("📅 Дни недели", "notify:days")));
         }
         rows.add(List.of(button("‹ Назад", backCallback)));
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    /**
+     * Day picker for notifications with toggles and presets.
+     */
+    public static InlineKeyboardMarkup buildNotifyDaysKeyboard(Set<Integer> enabledDays, String backCallback) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        String[] days = {"", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
+
+        // Row 1: Mon, Tue, Wed, Thu
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        for (int d = 1; d <= 4; d++) {
+            boolean active = enabledDays != null && enabledDays.contains(d);
+            String icon = active ? "✅ " : "❌ ";
+            row1.add(button(icon + days[d], "notify:day:" + d));
+        }
+        rows.add(row1);
+
+        // Row 2: Fri, Sat, Sun
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        for (int d = 5; d <= 7; d++) {
+            boolean active = enabledDays != null && enabledDays.contains(d);
+            String icon = active ? "✅ " : "❌ ";
+            row2.add(button(icon + days[d], "notify:day:" + d));
+        }
+        rows.add(row2);
+
+        // Row 3: Presets
+        rows.add(List.of(
+                button("Включить все", "notify:days_all"),
+                button("Только будни", "notify:days_weekdays")
+        ));
+
+        // Row 4: Back
+        rows.add(List.of(button("‹ Назад к уведомлениям", backCallback)));
+
         return new InlineKeyboardMarkup(rows);
     }
 

@@ -82,10 +82,10 @@ public class CallbackRouter {
             showStudentActions(chatId, messageId, groupName);
         } else if (data.startsWith("s_today:")) {
             showScheduleDay(chatId, messageId, data.substring("s_today:".length()),
-                    scheduleService.getTodayName(), false);
+                    scheduleService.getTodayName(), false, false);
         } else if (data.startsWith("s_tomorrow:")) {
             showScheduleDay(chatId, messageId, data.substring("s_tomorrow:".length()),
-                    scheduleService.getTomorrowName(), false);
+                    scheduleService.getTomorrowName(), false, true);
         } else if (data.startsWith("s_week:")) {
             showWeekSchedule(chatId, messageId, data.substring("s_week:".length()), false);
         } else if (data.startsWith("s_changes:")) {
@@ -105,10 +105,10 @@ public class CallbackRouter {
             showTeacherActions(chatId, messageId, teacherName);
         } else if (data.startsWith("t_today:")) {
             showScheduleDay(chatId, messageId, data.substring("t_today:".length()),
-                    scheduleService.getTodayName(), true);
+                    scheduleService.getTodayName(), true, false);
         } else if (data.startsWith("t_tomorrow:")) {
             showScheduleDay(chatId, messageId, data.substring("t_tomorrow:".length()),
-                    scheduleService.getTomorrowName(), true);
+                    scheduleService.getTomorrowName(), true, true);
         } else if (data.startsWith("t_week:")) {
             showWeekSchedule(chatId, messageId, data.substring("t_week:".length()), true);
         } else if (data.startsWith("t_changes:")) {
@@ -126,6 +126,24 @@ public class CallbackRouter {
             enableNotifications(chatId, messageId, user, time);
         } else if (data.equals("notify:custom_time")) {
             promptCustomTime(chatId, messageId, user);
+        } else if (data.equals("notify:days")) {
+            showNotifyDays(chatId, messageId, user);
+        } else if (data.startsWith("notify:day:")) {
+            try {
+                int day = Integer.parseInt(data.substring("notify:day:".length()));
+                user.toggleNotifyDay(day);
+                scheduleService.saveUser(user);
+            } catch (NumberFormatException ignored) {
+            }
+            showNotifyDays(chatId, messageId, user);
+        } else if (data.equals("notify:days_all")) {
+            user.setNotifyDaysSet(java.util.Set.of(1, 2, 3, 4, 5, 6, 7));
+            scheduleService.saveUser(user);
+            showNotifyDays(chatId, messageId, user);
+        } else if (data.equals("notify:days_weekdays")) {
+            user.setNotifyDaysSet(java.util.Set.of(1, 2, 3, 4, 5));
+            scheduleService.saveUser(user);
+            showNotifyDays(chatId, messageId, user);
 
         // ===== Back navigation =====
         } else if (data.equals("back:courses")) {
@@ -199,15 +217,17 @@ public class CallbackRouter {
 
     /**
      * Show schedule for a single day.
-     * @param name       group name (student) or teacher name (teacher)
-     * @param dayName    day of week in Russian, or empty string for weekend
-     * @param isTeacher  true for teacher view, false for student view
+     * @param name        group name (student) or teacher name (teacher)
+     * @param dayName     day of week in Russian, or empty string for weekend
+     * @param isTeacher   true for teacher view, false for student view
+     * @param isTomorrow  true if requested for tomorrow, false if for today
      */
-    private void showScheduleDay(long chatId, int messageId, String name, String dayName, boolean isTeacher) {
+    private void showScheduleDay(long chatId, int messageId, String name, String dayName, boolean isTeacher, boolean isTomorrow) {
         String text;
         if (dayName.isEmpty()) {
             String icon = isTeacher ? "👨‍🏫" : "👥";
-            text = icon + " <b>" + name + "</b>\n\n✨ <i>Сегодня выходной день!</i>";
+            String holidayText = isTomorrow ? "Завтра выходной день!" : "Сегодня выходной день!";
+            text = icon + " <b>" + name + "</b>\n\n✨ <i>" + holidayText + "</i>";
         } else {
             text = isTeacher
                     ? scheduleService.getScheduleTextForTeacher(name, dayName)
@@ -287,8 +307,9 @@ public class CallbackRouter {
 
         if (enabled && time != null) {
             sb.append("Статус: ✅ <b>Включены</b>\n");
-            sb.append("⏰ Время отправки: <b>").append(time).append(" (МСК)</b>\n\n");
-            sb.append("Каждый день в указанное время бот отправит\n");
+            sb.append("⏰ Время отправки: <b>").append(time).append(" (МСК)</b>\n");
+            sb.append("📅 Дни недели: <b>").append(user.getNotifyDaysSummary()).append("</b>\n\n");
+            sb.append("В выбранные дни в указанное время бот отправит\n");
             sb.append("свежие замены для ");
             if ("teacher".equals(user.getRole())) {
                 sb.append("Вас.");
@@ -296,8 +317,9 @@ public class CallbackRouter {
                 sb.append("Вашей группы.");
             }
         } else {
-            sb.append("Статус: ❌ <b>Выключены</b>\n\n");
-            sb.append("Включите, чтобы каждый день получать\n");
+            sb.append("Статус: ❌ <b>Выключены</b>\n");
+            sb.append("📅 Дни недели: <b>").append(user.getNotifyDaysSummary()).append("</b>\n\n");
+            sb.append("Включите, чтобы получать\n");
             sb.append("свежие замены для ");
             if ("teacher".equals(user.getRole())) {
                 sb.append("Вас.");
@@ -308,6 +330,14 @@ public class CallbackRouter {
 
         messageSender.editMessage(chatId, messageId, sb.toString(),
                 KeyboardFactory.buildNotifySettingsKeyboard(enabled, backCallback));
+    }
+
+    private void showNotifyDays(long chatId, int messageId, UserSettings user) {
+        String text = "📅 <b>Дни отправки уведомлений</b>\n\n" +
+                "Текущие дни: <b>" + user.getNotifyDaysSummary() + "</b>\n\n" +
+                "Нажмите на день недели, чтобы включить (✅) или выключить (❌) его:";
+        messageSender.editMessage(chatId, messageId, text,
+                KeyboardFactory.buildNotifyDaysKeyboard(user.getNotifyDaysSet(), "notify:settings"));
     }
 
     private void showTimePicker(long chatId, int messageId, UserSettings user) {

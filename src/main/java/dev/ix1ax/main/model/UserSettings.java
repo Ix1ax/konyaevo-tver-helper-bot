@@ -128,4 +128,94 @@ public class UserSettings {
     public void setNotifyTime(String notifyTime) {
         this.notifyTime = notifyTime;
     }
+
+    /**
+     * Active days of the week for notifications: comma-separated numbers 1-7 (1=Monday, 7=Sunday).
+     * Defaults to all 7 days: "1,2,3,4,5,6,7".
+     */
+    @Column(name = "notify_days")
+    private String notifyDays = "1,2,3,4,5,6,7";
+
+    public String getNotifyDays() {
+        if (notifyDays == null) {
+            return "1,2,3,4,5,6,7";
+        }
+        return notifyDays;
+    }
+
+    public void setNotifyDays(String notifyDays) {
+        this.notifyDays = notifyDays;
+    }
+
+    public java.util.Set<Integer> getNotifyDaysSet() {
+        java.util.Set<Integer> set = new java.util.TreeSet<>();
+        String days = getNotifyDays();
+        if (days.isBlank() || "none".equalsIgnoreCase(days.trim())) {
+            return set;
+        }
+        for (String part : days.split(",")) {
+            try {
+                int d = Integer.parseInt(part.trim());
+                if (d >= 1 && d <= 7) {
+                    set.add(d);
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return set;
+    }
+
+    public void setNotifyDaysSet(java.util.Set<Integer> set) {
+        if (set == null || set.isEmpty()) {
+            this.notifyDays = "none";
+            return;
+        }
+        java.util.List<String> list = new java.util.ArrayList<>();
+        for (int d = 1; d <= 7; d++) {
+            if (set.contains(d)) {
+                list.add(String.valueOf(d));
+            }
+        }
+        this.notifyDays = String.join(",", list);
+    }
+
+    public boolean isNotifyDayEnabled(int dayOfWeek) {
+        return getNotifyDaysSet().contains(dayOfWeek);
+    }
+
+    public void toggleNotifyDay(int dayOfWeek) {
+        if (dayOfWeek < 1 || dayOfWeek > 7) return;
+        java.util.Set<Integer> set = getNotifyDaysSet();
+        if (set.contains(dayOfWeek)) {
+            set.remove(dayOfWeek);
+        } else {
+            set.add(dayOfWeek);
+        }
+        setNotifyDaysSet(set);
+    }
+
+    public String getNotifyDaysSummary() {
+        java.util.Set<Integer> set = getNotifyDaysSet();
+        if (set.size() == 7) {
+            return "Каждый день";
+        }
+        if (set.isEmpty()) {
+            return "Не выбраны";
+        }
+        if (set.size() == 5 && set.contains(1) && set.contains(2) && set.contains(3) && set.contains(4) && set.contains(5)) {
+            return "Будни (Пн-Пт)";
+        }
+        if (set.size() == 2 && set.contains(6) && set.contains(7)) {
+            return "Выходные (Сб-Вс)";
+        }
+
+        String[] shortNames = {"", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
+        java.util.List<String> activeNames = new java.util.ArrayList<>();
+        for (int d = 1; d <= 7; d++) {
+            if (set.contains(d)) {
+                activeNames.add(shortNames[d]);
+            }
+        }
+        return String.join(", ", activeNames);
+    }
 }
