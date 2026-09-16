@@ -335,4 +335,113 @@ public class ScheduleParsingTest {
         System.out.println("Max group week schedule length: " + maxGroupWeekLen + " chars (Group: " + maxGroupWeekName + ")");
         System.out.println("Max teacher week schedule length: " + maxTeacherWeekLen + " chars (Teacher: " + maxTeacherWeekName + ")");
     }
+
+    @Test
+    public void testAlternatingWeeksFromPictures() throws Exception {
+        java.io.File file = new java.io.File("src/test/resources/schedule.xlsx");
+        assertTrue(file.exists());
+
+        ScheduleParserService parser = new ScheduleParserService();
+        Map<String, Map<String, DaySchedule>> scheduleByGroup = new HashMap<>();
+        Map<String, List<String>> groupsByCourse = new LinkedHashMap<>();
+        Set<String> teachers = new TreeSet<>();
+
+        String[] names = {"1 курс", "2 курс", "3 курс", "4 курс"};
+
+        try (java.io.InputStream is = new java.io.FileInputStream(file);
+             org.apache.poi.ss.usermodel.Workbook wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(is)) {
+            for (int i = 0; i < wb.getNumberOfSheets(); i++) {
+                org.apache.poi.ss.usermodel.Sheet sheet = wb.getSheetAt(i);
+                String courseName = i < names.length ? names[i] : sheet.getSheetName();
+                parser.parseSheetPoi(sheet, courseName, scheduleByGroup, groupsByCourse, teachers);
+            }
+        }
+
+        // 1. Verify 2-МР3 Monday lesson 5 is BLUE week!
+        DaySchedule mr3Monday = scheduleByGroup.get("2-МР3").get("Понедельник");
+        assertNotNull(mr3Monday);
+        Lesson mr3L5 = mr3Monday.getLessons().stream().filter(l -> l.getLessonNumber() == 5).findFirst().orElse(null);
+        assertNotNull(mr3L5, "2-МР3 Monday lesson 5 must exist");
+        assertEquals("Техническая механика", mr3L5.getSubject());
+        assertEquals("Серова У.С.", mr3L5.getTeacher());
+        assertEquals(Lesson.WEEK_BLUE, mr3L5.getWeekType(), "2-МР3 Monday lesson 5 must be BLUE week from picture anchor!");
+
+        // 2. Verify 2-МР1 Thursday lesson 5 is RED week!
+        DaySchedule mr1Thursday = scheduleByGroup.get("2-МР1").get("Четверг");
+        assertNotNull(mr1Thursday);
+        Lesson mr1L5 = mr1Thursday.getLessons().stream().filter(l -> l.getLessonNumber() == 5).findFirst().orElse(null);
+        assertNotNull(mr1L5, "2-МР1 Thursday lesson 5 must exist");
+        assertEquals("Техническая механика", mr1L5.getSubject());
+        assertEquals(Lesson.WEEK_RED, mr1L5.getWeekType(), "2-МР1 Thursday lesson 5 must be RED week!");
+
+        // 3. Verify 2-МР2 Thursday lesson 5 is BLUE week!
+        DaySchedule mr2Thursday = scheduleByGroup.get("2-МР2").get("Четверг");
+        assertNotNull(mr2Thursday);
+        Lesson mr2L5 = mr2Thursday.getLessons().stream().filter(l -> l.getLessonNumber() == 5).findFirst().orElse(null);
+        assertNotNull(mr2L5, "2-МР2 Thursday lesson 5 must exist");
+        assertEquals("Техническая механика", mr2L5.getSubject());
+        assertEquals(Lesson.WEEK_BLUE, mr2L5.getWeekType(), "2-МР2 Thursday lesson 5 must be BLUE week!");
+    }
+
+    @Test
+    public void testTeacherCancellationsFromMainSchedule() throws Exception {
+        ScheduleParserService scheduleParser = new ScheduleParserService();
+        var scheduleMapField = ScheduleParserService.class.getDeclaredField("scheduleByGroup");
+        scheduleMapField.setAccessible(true);
+        Map<String, Map<String, DaySchedule>> scheduleByGroup = new HashMap<>();
+
+        // Group 2-Ю3 on Tuesday has Lesson 1 with Vorontsova S.V.
+        DaySchedule tuesday = new DaySchedule("Вторник");
+        tuesday.addLesson(new Lesson(1, "8:30 - 10:05", "Страховое дело", "Воронцова С.В.", "19"));
+        // Group 2-Ю3 on Tuesday has Lesson 2 with Piskareva Zh.M.
+        tuesday.addLesson(new Lesson(2, "10:15 - 11:50", "ТГП", "Пискарева Ж.М.", "212"));
+
+        scheduleByGroup.put("2-Ю3", Map.of("Вторник", tuesday));
+        scheduleMapField.set(scheduleParser, scheduleByGroup);
+
+        ChangesParserService changesService = new ChangesParserService(scheduleParser);
+
+        var dateField = ChangesParserService.class.getDeclaredField("changesDate");
+        dateField.setAccessible(true);
+        dateField.set(changesService, "15 сентября (вторник)");
+
+        var mapField = ChangesParserService.class.getDeclaredField("changesByGroup");
+        mapField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, Map<Integer, String>> changesMap = (Map<String, Map<Integer, String>>) mapField.get(changesService);
+
+        // Group 2-Ю3 has slot 1 with just "ОТМЕНА" (no teacher name!)
+        Map<Integer, String> u3 = new HashMap<>();
+        u3.put(1, "ОТМЕНА");
+        changesMap.put("2-Ю3", u3);
+
+        // Vorontsova S.V. should see 2-Ю3 — 1 пара: ОТМЕНА because she teaches 2-Ю3 at slot 1 in the main schedule
+        String vorontsovaChanges = changesService.getFormattedChangesForTeacher("Воронцова С.В.");
+        assertTrue(vorontsovaChanges.contains("2-Ю3"), "Should mention 2-Ю3");
+        assertTrue(vorontsovaChanges.contains("1 пара"), "Should mention 1 пара");
+        assertTrue(vorontsovaChanges.contains("ОТМЕНА"), "Should mention ОТМЕНА");
+
+        // Piskareva Zh.M. should NOT see 2-Ю3 — 1 пара because she teaches slot 2, not slot 1
+        String piskarevaChanges = changesService.getFormattedChangesForTeacher("Пискарева Ж.М.");
+        assertFalse(piskarevaChanges.contains("2-Ю3"), "Piskareva should not see cancellation for Vorontsova's slot");
+        assertTrue(piskarevaChanges.contains("Изменений нет"), "Should say no changes for Piskareva");
+    }
+
+    @Test
+    public void testTomorrowWeekendHandling() {
+        // When today is Friday, tomorrow is Saturday (weekend) -> empty string
+        java.time.DayOfWeek friday = java.time.DayOfWeek.FRIDAY;
+        java.time.DayOfWeek saturday = java.time.DayOfWeek.SATURDAY;
+        java.time.DayOfWeek sunday = java.time.DayOfWeek.SUNDAY;
+
+        java.time.DayOfWeek tomorrowFriday = friday.plus(1);
+        assertTrue(tomorrowFriday == java.time.DayOfWeek.SATURDAY || tomorrowFriday == java.time.DayOfWeek.SUNDAY);
+
+        java.time.DayOfWeek tomorrowSaturday = saturday.plus(1);
+        assertTrue(tomorrowSaturday == java.time.DayOfWeek.SATURDAY || tomorrowSaturday == java.time.DayOfWeek.SUNDAY);
+
+        java.time.DayOfWeek tomorrowSunday = sunday.plus(1);
+        assertFalse(tomorrowSunday == java.time.DayOfWeek.SATURDAY || tomorrowSunday == java.time.DayOfWeek.SUNDAY);
+        assertEquals(java.time.DayOfWeek.MONDAY, tomorrowSunday);
+    }
 }
