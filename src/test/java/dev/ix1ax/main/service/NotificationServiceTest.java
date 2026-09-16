@@ -101,6 +101,86 @@ public class NotificationServiceTest {
         assertTrue(messageSender.sentMessages.isEmpty(), "User without role/group should be skipped");
     }
 
+    @Test
+    public void testNotificationSentOnEnabledDay() {
+        UserSettings student = new UserSettings(500L);
+        student.setRole("student");
+        student.setGroupName("2-МР3");
+        student.setNotifyEnabled(true);
+        student.setNotifyTime("07:30");
+        student.setNotifyDaysSet(Set.of(1, 3, 5)); // Mon, Wed, Fri
+        userRepo.users.add(student);
+
+        notificationService.processNotificationsForTime("07:30", java.time.DayOfWeek.MONDAY);
+
+        assertEquals(1, messageSender.sentMessages.size());
+        assertEquals(500L, messageSender.sentMessages.get(0).chatId);
+    }
+
+    @Test
+    public void testNotificationSkippedOnDisabledDay() {
+        UserSettings student = new UserSettings(600L);
+        student.setRole("student");
+        student.setGroupName("2-МР3");
+        student.setNotifyEnabled(true);
+        student.setNotifyTime("07:30");
+        student.setNotifyDaysSet(Set.of(1, 3, 5)); // Mon, Wed, Fri
+        userRepo.users.add(student);
+
+        notificationService.processNotificationsForTime("07:30", java.time.DayOfWeek.TUESDAY);
+
+        assertTrue(messageSender.sentMessages.isEmpty(), "Notification should be skipped on Tuesday");
+    }
+
+    @Test
+    public void testDefaultAllDaysEnabled() {
+        UserSettings student = new UserSettings(700L);
+        student.setRole("student");
+        student.setGroupName("1-Ю1");
+        student.setNotifyEnabled(true);
+        student.setNotifyTime("07:30");
+        userRepo.users.add(student);
+
+        assertEquals(7, student.getNotifyDaysSet().size(), "Default should have all 7 days enabled");
+        assertEquals("Каждый день", student.getNotifyDaysSummary());
+
+        // Test sending on Saturday and Sunday
+        notificationService.processNotificationsForTime("07:30", java.time.DayOfWeek.SATURDAY);
+        assertEquals(1, messageSender.sentMessages.size());
+
+        notificationService.processNotificationsForTime("07:30", java.time.DayOfWeek.SUNDAY);
+        assertEquals(2, messageSender.sentMessages.size());
+    }
+
+    @Test
+    public void testToggleDaysAndSummary() {
+        UserSettings user = new UserSettings(800L);
+        assertEquals("Каждый день", user.getNotifyDaysSummary());
+
+        // Toggle Monday off
+        user.toggleNotifyDay(1);
+        assertFalse(user.isNotifyDayEnabled(1));
+        assertTrue(user.isNotifyDayEnabled(2));
+        assertEquals("Вт, Ср, Чт, Пт, Сб, Вс", user.getNotifyDaysSummary());
+
+        // Toggle Monday back on
+        user.toggleNotifyDay(1);
+        assertTrue(user.isNotifyDayEnabled(1));
+        assertEquals("Каждый день", user.getNotifyDaysSummary());
+
+        // Weekdays preset (1-5)
+        user.setNotifyDaysSet(Set.of(1, 2, 3, 4, 5));
+        assertEquals("Будни (Пн-Пт)", user.getNotifyDaysSummary());
+
+        // Weekends preset (6-7)
+        user.setNotifyDaysSet(Set.of(6, 7));
+        assertEquals("Выходные (Сб-Вс)", user.getNotifyDaysSummary());
+
+        // Empty set
+        user.setNotifyDaysSet(Collections.emptySet());
+        assertEquals("Не выбраны", user.getNotifyDaysSummary());
+    }
+
     // ===== Test Stubs =====
 
     private static class TestChangesParser extends ChangesParserService {

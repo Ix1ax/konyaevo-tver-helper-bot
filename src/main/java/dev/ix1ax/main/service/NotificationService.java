@@ -8,6 +8,8 @@ import dev.ix1ax.main.bot.MessageSender;
 import dev.ix1ax.main.model.UserSettings;
 import dev.ix1ax.main.repository.UserSettingsRepository;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -43,22 +45,33 @@ public class NotificationService {
     @Scheduled(cron = "0 * * * * *")
     public void processNotifications() {
         String currentTime = LocalTime.now(MOSCOW).format(TIME_FORMAT);
-        processNotificationsForTime(currentTime);
+        DayOfWeek currentDay = LocalDate.now(MOSCOW).getDayOfWeek();
+        processNotificationsForTime(currentTime, currentDay);
     }
 
     public void processNotificationsForTime(String currentTime) {
+        processNotificationsForTime(currentTime, LocalDate.now(MOSCOW).getDayOfWeek());
+    }
+
+    public void processNotificationsForTime(String currentTime, DayOfWeek currentDay) {
         List<UserSettings> users = userSettingsRepo.findByNotifyEnabledTrueAndNotifyTime(currentTime);
         if (users.isEmpty()) {
             return;
         }
 
-        log.info("[NOTIFY] Processing {} notification(s) for time {}", users.size(), currentTime);
+        log.info("[NOTIFY] Processing {} notification(s) for time {} on {}", users.size(), currentTime, currentDay);
 
         int sent = 0;
         int blocked = 0;
         int skipped = 0;
+        int dayValue = currentDay.getValue(); // 1 = Monday, 7 = Sunday
 
         for (UserSettings user : users) {
+            if (!user.isNotifyDayEnabled(dayValue)) {
+                skipped++;
+                continue;
+            }
+
             Long chatId = user.getChatId();
             String text = buildNotificationText(user);
 
