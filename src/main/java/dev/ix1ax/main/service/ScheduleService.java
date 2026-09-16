@@ -118,16 +118,16 @@ public class ScheduleService {
     }
 
     /**
-     * Get tomorrow's day name. Skips Saturday/Sunday → returns Monday.
+     * Get tomorrow's day name. Returns empty string for Saturday and Sunday (weekends).
+     * On Sunday, tomorrow is Monday, so returns "Понедельник".
+     * On Friday and Saturday, tomorrow is a weekend, so returns "".
      */
     public String getTomorrowName() {
-        LocalDate tomorrow = LocalDate.now(MOSCOW).plusDays(1);
-        if (tomorrow.getDayOfWeek() == DayOfWeek.SATURDAY) {
-            tomorrow = tomorrow.plusDays(2);
-        } else if (tomorrow.getDayOfWeek() == DayOfWeek.SUNDAY) {
-            tomorrow = tomorrow.plusDays(1);
+        DayOfWeek dow = LocalDate.now(MOSCOW).plusDays(1).getDayOfWeek();
+        if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            return "";
         }
-        return DAY_NAMES.getOrDefault(tomorrow.getDayOfWeek(), "");
+        return DAY_NAMES.getOrDefault(dow, "");
     }
 
     public String getScheduleTextForGroup(String groupName, String dayName) {
