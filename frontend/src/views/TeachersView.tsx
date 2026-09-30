@@ -3,7 +3,7 @@ import { Search, ChevronRight, ArrowLeft, Check, UserRound } from 'lucide-react'
 import { Header } from '../components/Header';
 import { LessonCard } from '../components/LessonCard';
 import { DaySelector } from '../components/DaySelector';
-import { EmptyState, IconBadge } from '../components/Ui';
+import { LoadingIndicator, EmptyState, IconBadge } from '../components/Ui';
 import { useApp } from '../context/AppContext';
 import { api, profileRequest } from '../api/client';
 import type { ScheduleMap } from '../types';
@@ -49,7 +49,7 @@ export function TeachersView() {
       </button>
       <DaySelector days={DAYS} selectedDay={day} onSelectDay={setDay} todayName={info.todayName} />
       <div className="mt-4">{error ? <p role="alert" className="notice error-notice">{error}</p>
-        : loading ? <p className="text-sm text-theme-subtext py-5">Загружаем расписание…</p>
+        : loading ? <LoadingIndicator />
         : lessons.length ? lessons.map((lesson, index) => <LessonCard key={index} lesson={lesson} highlightCurrent={day === info.todayName} />) : <EmptyState />}</div>
     </> : <>
       <Header title="Преподаватели" showGreeting={false} />

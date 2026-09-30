@@ -11,7 +11,7 @@ import { ProfileView } from './views/ProfileView';
 import { FeedbackPrompt } from './components/FeedbackPrompt';
 import { ChatVersionNotice, hasSeenChatNotice } from './components/ChatVersionNotice';
 import { useTelegram } from './hooks/useTelegram';
-import { EmptyState } from './components/Ui';
+import { EmptyState, LoadingIndicator } from './components/Ui';
 
 const AdminView = lazy(() => import('./views/AdminView'));
 
@@ -20,7 +20,7 @@ export function App() {
   const noticeKey = `konyaevo:chat-notice:v1:${user?.id ?? 'browser'}`;
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
   const noticeOpen = dismissedNotice !== noticeKey && !hasSeenChatNotice(noticeKey);
-  const { activeTab, setActiveTab, loadError, loading, role, selectedGroup, selectedTeacher, isAdmin } = useApp();
+  const { activeTab, setActiveTab, loadError, loading, role, selectedGroup, selectedTeacher, isAdmin, refreshing } = useApp();
   const views = { today: TodayView, tomorrow: TomorrowView, week: WeekView, classrooms: ClassroomsView,
     teachers: TeachersView, changes: ChangesView, profile: ProfileView, admin: AdminView };
   const View = views[activeTab];
@@ -29,12 +29,13 @@ export function App() {
 
   return <div className={`app-shell min-h-screen text-theme-text ${isAdmin ? 'has-admin-navigation' : ''}`}>
     <main className={`max-w-lg mx-auto min-h-screen ${isAdmin ? 'pb-14' : ''}`}>
+      {refreshing && <LoadingIndicator compact label="Обновляем расписание…" />}
       {loadError && <p role="alert" className="notice error-notice m-5">{loadError}</p>}
-      {needsProfile && (loading || loadError || !selected)
+      {loading ? <LoadingIndicator /> : needsProfile && (loadError || !selected)
         ? <div className="page"><EmptyState title={loading ? 'Загружаем расписание' : loadError ? 'Данные недоступны' : 'Ваше расписание'}>
             {loading ? 'Это займёт несколько секунд.' : loadError ? 'Повторите загрузку в профиле.' : 'Выберите группу или преподавателя.'}
           </EmptyState><button className="button-quiet w-full" onClick={() => setActiveTab('profile')}>Открыть профиль</button></div>
-        : <Suspense fallback={<p className="page text-theme-subtext">Загружаем раздел…</p>}><View /></Suspense>}
+        : <Suspense fallback={<LoadingIndicator label="Загружаем раздел…" />}><View /></Suspense>}
     </main>
     <BottomNav />
     {noticeOpen && <ChatVersionNotice storageKey={noticeKey} onDismiss={() => setDismissedNotice(noticeKey)} />}

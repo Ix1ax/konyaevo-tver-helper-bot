@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowRightLeft, Ban, ArrowLeft } from 'lucide-react';
 import { Header } from '../components/Header';
-import { EmptyState, IconBadge } from '../components/Ui';
+import { LoadingIndicator, EmptyState, IconBadge } from '../components/Ui';
 import { useApp } from '../context/AppContext';
 import { api } from '../api/client';
 import type { ChangeItem } from '../types';
@@ -40,7 +40,7 @@ export function ChangesView() {
     <p className="text-sm text-theme-subtext mb-4">{info.changesDate || 'Дата ещё не опубликована'}</p>
     {isAdmin && <div className="grid grid-cols-2 gap-2 mb-5"><button className="choice" aria-pressed={!all} onClick={() => setAll(false)}>Мои</button>
       <button className="choice" aria-pressed={all} onClick={() => setAll(true)}>Весь колледж</button></div>}
-    {error ? <p role="alert" className="notice error-notice">{error}</p> : loading ? <p className="text-sm text-theme-subtext">Загружаем изменения…</p>
+    {error ? <p role="alert" className="notice error-notice">{error}</p> : loading ? <LoadingIndicator label="Загружаем изменения…" />
       : visible.length ? <div className="settings-group">{visible.map((item) => <div className="settings-row !items-start" key={`${item.groupName}:${item.slot}`}>
         <IconBadge icon={item.canceled ? Ban : ArrowRightLeft} /><div><h2 className="font-semibold text-sm">{item.groupName} · {item.slot} пара</h2>
           <p className="mt-2 text-sm text-theme-subtext whitespace-pre-line leading-relaxed">{item.canceled ? 'Отмена' : item.text}</p></div>

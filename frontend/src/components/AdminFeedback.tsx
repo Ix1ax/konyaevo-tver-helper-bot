@@ -1,3 +1,4 @@
+import { LoadingIndicator } from './Ui';
 import { useEffect, useState } from 'react';
 import { signedRequest } from '../api/client';
 interface Review { id: number; userId: number; stars: number; comment: string; createdAt: string }
@@ -32,7 +33,7 @@ export function AdminFeedback() {
         <button className="button-quiet" disabled={loading || page + 1 >= data.pages} onClick={() => setPage(p => p + 1)}>Далее</button>
       </div>}
     </>}
-    {loading && <p className="text-xs text-theme-subtext mt-3">Загружаем отзывы…</p>}
+    {loading && <LoadingIndicator compact={Boolean(data)} label="Загружаем отзывы…" />}
     {error && <p className="text-sm mt-3" role="alert">{error}</p>}
   </section>;
 }

@@ -1,3 +1,4 @@
+import { LoadingIndicator } from './Ui';
 import { useEffect, useState } from 'react';
 import { ShieldCheck, RefreshCw } from 'lucide-react';
 import { useTelegram } from '../hooks/useTelegram';
@@ -59,6 +60,7 @@ export function AdminPanel({ section = 'users' }: { section?: 'users' | 'schedul
   }, [initData, revision]);
 
   // Панель появляется только после разрешённого сервером ответа.
+  if (!data && loading && !error) return <LoadingIndicator label="Загружаем сводку…" />;
   if (!data) return <p role={error ? 'alert' : 'status'} className="notice">{error || (loading ? 'Загружаем сводку…' : 'Сводка недоступна.')}
     <button className="button-quiet ml-2" disabled={loading} onClick={() => setRevision(v => v + 1)}>Повторить</button></p>;
 

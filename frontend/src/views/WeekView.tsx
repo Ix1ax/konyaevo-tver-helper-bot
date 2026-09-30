@@ -4,7 +4,7 @@ import { Header } from '../components/Header';
 import { DaySelector } from '../components/DaySelector';
 import { SummaryCard } from '../components/SummaryCard';
 import { LessonCard } from '../components/LessonCard';
-import { EmptyState } from '../components/Ui';
+import { LoadingIndicator, EmptyState } from '../components/Ui';
 import { useApp } from '../context/AppContext';
 
 import { api } from '../api/client';
@@ -38,7 +38,7 @@ export function WeekView() {
     </button>
     <DaySelector days={DAYS} selectedDay={day} onSelectDay={setDay} todayName={info.todayName} />
     <SummaryCard lessons={lessons} dayName={day} />
-    {loading ? <EmptyState>Загружаем основное расписание…</EmptyState> : error ? <EmptyState>{error}</EmptyState> : lessons.length ? lessons.map((lesson, index) => <LessonCard key={`${lesson.lessonNumber}-${index}`} lesson={lesson} />)
+    {loading ? <LoadingIndicator label="Загружаем основное расписание…" /> : error ? <EmptyState>{error}</EmptyState> : lessons.length ? lessons.map((lesson, index) => <LessonCard key={`${lesson.lessonNumber}-${index}`} lesson={lesson} />)
       : <EmptyState>На выбранный день и неделю занятий нет.</EmptyState>}
   </div>;
 }
