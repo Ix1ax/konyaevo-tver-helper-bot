@@ -158,14 +158,14 @@ public class ChangesParserService {
     public String getFormattedChanges(String groupName) {
         Map<Integer, String> changes = getChangesForGroup(groupName);
         if (changes.isEmpty()) {
-            return "<b>Изменения на " + HtmlUtils.escapeHtml(changesDate) + "</b>\n\n" +
-                    "<b>Группа: " + HtmlUtils.escapeHtml(groupName) + "</b>\n\n" +
-                    "<i>Изменений нет</i>";
+            return "🔄 <b>Изменения на " + HtmlUtils.escapeHtml(changesDate) + "</b>\n\n" +
+                    "👥 <b>Группа: " + HtmlUtils.escapeHtml(groupName) + "</b>\n\n" +
+                    "✅ <i>Изменений нет</i>";
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("<b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
-        sb.append("<b>Группа: ").append(HtmlUtils.escapeHtml(groupName)).append("</b>\n\n");
+        sb.append("🔄 <b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
+        sb.append("👥 <b>Группа: ").append(HtmlUtils.escapeHtml(groupName)).append("</b>\n\n");
 
         List<Integer> slots = new ArrayList<>(changes.keySet());
         Collections.sort(slots);
@@ -173,20 +173,31 @@ public class ChangesParserService {
         for (int i = 0; i < slots.size(); i++) {
             int slot = slots.get(i);
             String changeText = changes.get(slot);
-            sb.append("<b>").append(slot).append(" пара</b>:\n");
-            String[] lines = isCancellation(changeText) ? new String[]{"ОТМЕНА"} : changeText.split("\n");
-            for (String line : lines) {
-                String trimmed = line.trim();
-                if (!trimmed.isEmpty()) {
-                    sb.append("   ").append(HtmlUtils.escapeHtml(trimmed)).append("\n");
-                }
-            }
+            sb.append("🕒 <b>").append(slot).append(" пара</b>\n");
+            appendChangeDetails(sb, changeText);
             if (i < slots.size() - 1) {
                 sb.append("\n");
             }
         }
 
         return sb.toString().trim();
+    }
+
+    private void appendChangeDetails(StringBuilder sb, String text) {
+        if (isCancellation(text)) {
+            sb.append("❌ <b>ОТМЕНА</b>\n");
+            return;
+        }
+        int index = 0;
+        for (String line : text.split("\n")) {
+            String value = line.trim();
+            if (value.isEmpty()) continue;
+            boolean room = value.toLowerCase(java.util.Locale.ROOT).contains("ауд")
+                    || value.matches("^[0-9]{1,4}[а-яА-Яa-zA-Z]?$");
+            String icon = index == 0 ? "📖 " : room ? "📍 " : index == 1 ? "👨‍🏫 " : "ℹ️ ";
+            sb.append(icon).append("<b>").append(HtmlUtils.escapeHtml(value)).append("</b>\n");
+            index++;
+        }
     }
 
     private ScheduleParserService scheduleParser;
@@ -216,8 +227,8 @@ public class ChangesParserService {
      */
     public String getFormattedChangesForTeacher(String teacherName) {
         StringBuilder sb = new StringBuilder();
-        sb.append("<b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
-        sb.append("<b>").append(HtmlUtils.escapeHtml(teacherName)).append("</b>\n\n");
+        sb.append("🔄 <b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
+        sb.append("👨‍🏫 <b>").append(HtmlUtils.escapeHtml(teacherName)).append("</b>\n\n");
 
         List<TeacherChangeEntry> changeEntries = new ArrayList<>();
         Set<String> addedKeys = new HashSet<>();
@@ -233,14 +244,9 @@ public class ChangesParserService {
                 if (teacherMatches(val, teacherName)) {
                     addedKeys.add(slot + ":" + groupName);
                     StringBuilder entrySb = new StringBuilder();
-                    entrySb.append("<b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
+                    entrySb.append("👥 <b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
                             .append(slot).append(" пара</b>:\n");
-                    for (String line : isCancellation(val) ? new String[]{"ОТМЕНА"} : val.split("\n")) {
-                        String trimmed = line.trim();
-                        if (!trimmed.isEmpty()) {
-                            entrySb.append("   ").append(HtmlUtils.escapeHtml(trimmed)).append("\n");
-                        }
-                    }
+                    appendChangeDetails(entrySb, val);
                     changeEntries.add(new TeacherChangeEntry(slot, groupName, entrySb.toString().trim()));
                 }
             }
@@ -285,9 +291,9 @@ public class ChangesParserService {
                             if (hasLesson) {
                                 addedKeys.add(key);
                                 StringBuilder entrySb = new StringBuilder();
-                                entrySb.append("<b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
+                                entrySb.append("👥 <b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
                                         .append(slot).append(" пара</b>:\n");
-                                entrySb.append("   <b>ОТМЕНА</b>\n");
+                                entrySb.append("❌ <b>ОТМЕНА</b>\n");
                                 changeEntries.add(new TeacherChangeEntry(slot, groupName, entrySb.toString().trim()));
                             }
                         }
@@ -303,7 +309,7 @@ public class ChangesParserService {
         );
 
         if (changeEntries.isEmpty()) {
-            sb.append("<i>Изменений нет</i>");
+            sb.append("✅ <i>Изменений нет</i>");
         } else {
             for (int i = 0; i < changeEntries.size(); i++) {
                 sb.append(changeEntries.get(i).formattedText);
