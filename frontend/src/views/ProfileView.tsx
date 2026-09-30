@@ -12,7 +12,6 @@ import {
 import { useApp } from '../context/AppContext';
 import { useTheme, THEMES } from '../context/ThemeContext';
 import { useTelegram } from '../hooks/useTelegram';
-import { HomeScreenShortcut } from '../components/HomeScreenShortcut';
 import { profileRequest } from '../api/client';
 import { HelpPanel } from '../components/HelpPanel';
 import { NotificationSettings } from '../components/NotificationSettings';
@@ -266,7 +265,6 @@ export function ProfileView() {
       </div>
 
       <HelpPanel />
-      <HomeScreenShortcut />
     </div>
   );
 }
