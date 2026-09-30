@@ -26,9 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
- * Parses schedule data from Google Sheets (prioritizing in-memory streaming XLSX with POI,
- * falling back to CSV).
- * Maintains an in-memory cache that refreshes periodically.
+ * Загружает XLSX из Google Таблиц и разбирает книгу в памяти через POI.
+ * При ошибке использует CSV, но в нём нет рисунков и форматирования ячеек.
  */
 @Service
 public class ScheduleParserService {
@@ -130,7 +129,7 @@ public class ScheduleParserService {
             // Build teacher schedule
             Map<String, Map<String, DaySchedule>> newScheduleByTeacher = buildTeacherSchedule(newScheduleByGroup);
 
-            // Atomic snapshot publication (zero lock, no empty cache window)
+            // Публикуем готовые справочники, не очищая предыдущие данные перед загрузкой.
             this.scheduleByGroup = newScheduleByGroup;
             this.groupsByCourse = newGroupsByCourse;
             this.allTeachers = newTeachers;
@@ -665,6 +664,29 @@ public class ScheduleParserService {
 
     public Set<String> getAllTeachers() {
         return Collections.unmodifiableSet(new TreeSet<>(allTeachers));
+    }
+
+    public List<String> getAllRooms() {
+        Set<String> rooms = new TreeSet<>((a, b) -> {
+            try {
+                int numA = Integer.parseInt(a.replaceAll("\\D", ""));
+                int numB = Integer.parseInt(b.replaceAll("\\D", ""));
+                if (numA != numB) return Integer.compare(numA, numB);
+            } catch (Exception ignored) {}
+            return a.compareToIgnoreCase(b);
+        });
+
+        for (Map<String, DaySchedule> dayMap : scheduleByGroup.values()) {
+            for (DaySchedule ds : dayMap.values()) {
+                for (Lesson l : ds.getLessons()) {
+                    String r = l.getRoom();
+                    if (r != null && !r.isBlank() && !r.equalsIgnoreCase("дистант") && !r.equalsIgnoreCase("zoom")) {
+                        rooms.add(r.trim());
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(rooms);
     }
 
     /**

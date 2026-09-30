@@ -20,6 +20,9 @@ import dev.ix1ax.main.service.ScheduleService;
 @Component
 public class KonyaevoBot extends TelegramLongPollingBot {
 
+    private final java.util.Map<Long, Long> pendingBroadcastMedia = new java.util.concurrent.ConcurrentHashMap<>();
+    private final ChatUpdateDispatcher updates;
+
     private static final Logger log = LoggerFactory.getLogger(KonyaevoBot.class);
 
     @Value("${bot.username}")
@@ -36,15 +39,18 @@ public class KonyaevoBot extends TelegramLongPollingBot {
                        @Value("${bot.proxy.type:NO_PROXY}") String proxyType,
                        @Value("${bot.proxy.host:127.0.0.1}") String proxyHost,
                        @Value("${bot.proxy.port:10808}") int proxyPort,
+                       @Value("${bot.mini-app-url:}") String miniAppUrl,
                        ScheduleService scheduleService,
                        CallbackRouter callbackRouter,
                        MessageSender messageSender,
                        dev.ix1ax.main.service.AdminService adminService) {
         super(createBotOptions(baseUrl, maxThreads, proxyType, proxyHost, proxyPort), botToken);
+        this.updates = new ChatUpdateDispatcher(maxThreads);
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
         this.adminService = adminService;
+        KeyboardFactory.setMiniAppUrl(miniAppUrl);
 
         // AbsSender has captured the fast senderConfig (5s socket timeout) from createBotOptions().
         // Now set pollingConfig (25s socket timeout) for DefaultBotSession long polling (15s getUpdates):
@@ -113,11 +119,22 @@ public class KonyaevoBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
+        Long chat = update.hasMyChatMember() ? update.getMyChatMember().getChat().getId() : update.hasMessage() ? update.getMessage().getChatId()
+                : update.hasCallbackQuery() && update.getCallbackQuery().getMessage() != null ? update.getCallbackQuery().getMessage().getChatId() : null;
+        updates.dispatch(chat == null ? 0 : chat, () -> processUpdate(update));
+    }
+
+    @jakarta.annotation.PreDestroy
+    public void shutdownUpdates() { updates.close(); }
+
+    private void processUpdate(Update update) {
         try {
             if (update.hasMyChatMember()) {
                 handleMyChatMember(update);
             } else if (update.hasMessage() && update.getMessage().hasText()) {
                 handleTextMessage(update);
+            } else if (update.hasMessage()) {
+                handleMediaMessage(update.getMessage());
             } else if (update.hasCallbackQuery()) {
                 handleCallback(update);
             }
@@ -159,14 +176,28 @@ public class KonyaevoBot extends TelegramLongPollingBot {
                     : update.getMessage().getFrom().getFirstName())
                 : "id:" + chatId;
 
-        log.info("[USER MESSAGE] ChatId: {} ({}) sent text: '{}'", chatId, sender, text);
+        log.debug("[USER MESSAGE] ChatId: {} ({}) sent text: '{}'", chatId, sender, text);
 
         if (text == null || text.isBlank()) {
             return;
         }
 
+        if (update.getMessage().getFrom() == null || update.getMessage().getFrom().getId() != chatId) return;
+        scheduleService.getOrCreateUser(chatId);
+        callbackRouter.recordActivity(chatId);
         String trimmed = text.trim();
+        if (trimmed.startsWith("/")) callbackRouter.cancelInput(chatId);
 
+        if (trimmed.equals("/help")) {
+            pendingBroadcastMedia.remove(chatId);
+            messageSender.sendDirectMessage(chatId, HelpText.forUser(adminService.isAdmin(chatId)), KeyboardFactory.buildScheduleKeyboard());
+            return;
+        }
+        if (trimmed.equals("/cancel")) {
+            pendingBroadcastMedia.remove(chatId); callbackRouter.cancelInput(chatId);
+            sendMainMenu(chatId); return;
+        }
+        if (!trimmed.equals("/broadcast")) pendingBroadcastMedia.remove(chatId);
         // Admin commands
         if (adminService.isAdmin(chatId)) {
             if (trimmed.equals("/admin")) {
@@ -182,8 +213,12 @@ public class KonyaevoBot extends TelegramLongPollingBot {
                 return;
             }
             if (trimmed.equals("/broadcast")) {
-                String help = "📢 <b>Рассылка сообщений</b>\n\n" +
-                        "Используйте команду:\n" +
+                var media = BroadcastMedia.from(update.getMessage().getReplyToMessage());
+                if (media != null) { previewMedia(chatId, media); return; }
+                pendingBroadcastMedia.entrySet().removeIf(entry -> System.currentTimeMillis() - entry.getValue() > 600000);
+                pendingBroadcastMedia.put(chatId, System.currentTimeMillis());
+                String help = "<b>Рассылка сообщений</b>\n\n" +
+                        "Прикрепите видео, фото, GIF или файл с подписью. На загрузку есть 10 минут. Отмена: /cancel.\n\nДля текста используйте команду:\n" +
                         "<code>/broadcast [текст сообщения]</code>\n\n" +
                         "<i>Поддерживается HTML-разметка Telegram. Перед отправкой бот покажет предпросмотр сообщения и запросит подтверждение.</i>";
                 messageSender.sendDirectMessage(chatId, help, KeyboardFactory.buildAdminBackKeyboard());
@@ -196,20 +231,44 @@ public class KonyaevoBot extends TelegramLongPollingBot {
             }
         }
 
-        // Check if user is entering a custom notification time (e.g. "07:30", "17:53")
-        if (trimmed.matches("^\\d{1,2}:\\d{2}$")) {
-            if (callbackRouter.handleCustomTimeInput(chatId, trimmed)) {
-                return;
-            }
-        }
+        if (callbackRouter.handleCustomTimeInput(chatId, trimmed)) return;
 
+        callbackRouter.cancelInput(chatId);
         sendMainMenu(chatId);
+    }
+
+    private void handleMediaMessage(org.telegram.telegrambots.meta.api.objects.Message message) {
+        long chat = message.getChatId();
+        if (message.getFrom() == null || message.getFrom().getId() != chat || !adminService.isAdmin(chat)) return;
+        Long waiting = pendingBroadcastMedia.remove(chat);
+        if (waiting == null || System.currentTimeMillis() - waiting > 600000) return;
+        if (message.getMediaGroupId() != null) {
+            messageSender.sendDirectMessage(chat, "Отправьте одно видео или фото отдельно. Альбомы для рассылки пока не поддерживаются. Снова введите /broadcast.", KeyboardFactory.buildAdminBackKeyboard());
+            return;
+        }
+        BroadcastMedia media = BroadcastMedia.from(message);
+        if (media == null) {
+            messageSender.sendDirectMessage(chat, "Поддерживаются видео, фото, GIF и документы. Снова введите /broadcast и прикрепите файл.", KeyboardFactory.buildAdminBackKeyboard());
+            return;
+        }
+        previewMedia(chat, media);
+    }
+
+    private void previewMedia(long chat, BroadcastMedia media) {
+        pendingBroadcastMedia.remove(chat);
+        if (messageSender.sendDirectMedia(chat, media) != MessageSender.DirectSendResult.SUCCESS) {
+            messageSender.sendDirectMessage(chat, "Не удалось показать медиа. Рассылка не создана. Попробуйте загрузить файл ещё раз.", KeyboardFactory.buildAdminBackKeyboard());
+            return;
+        }
+        var draft = adminService.createMediaDraft(chat, media);
+        messageSender.sendDirectMessage(chat, "<b>Предпросмотр рассылки</b>\n\nМедиа и подпись показаны выше.\nПолучателей: <b>" + adminService.getTotalRecipients() + "</b>\n\nОтправить всем пользователям?",
+                KeyboardFactory.buildBroadcastConfirmKeyboard(draft.id()));
     }
 
     private void handleBroadcastDraft(long chatId, String broadcastContent) {
         if (broadcastContent.isBlank()) {
             messageSender.sendDirectMessage(chatId,
-                    "⚠️ <i>Текст рассылки не может быть пустым.</i>",
+                    "<i>Текст рассылки не может быть пустым.</i>",
                     KeyboardFactory.buildAdminBackKeyboard());
             return;
         }
@@ -217,11 +276,11 @@ public class KonyaevoBot extends TelegramLongPollingBot {
         var draft = adminService.createDraft(chatId, broadcastContent);
         long totalUsers = adminService.getTotalRecipients();
 
-        String preview = "📢 <b>Предпросмотр рассылки</b>\n\n" +
-                "──────────────────\n" +
+        String preview = "<b>Предпросмотр рассылки</b>\n\n" +
+                "\n" +
                 broadcastContent + "\n" +
-                "──────────────────\n\n" +
-                "👥 Получателей в базе: <b>" + totalUsers + "</b>\n\n" +
+                "\n\n" +
+                "Получателей в базе: <b>" + totalUsers + "</b>\n\n" +
                 "<i>Подтвердите отправку сообщения всем пользователям бота:</i>";
 
         messageSender.sendDirectMessage(chatId, preview,
@@ -230,8 +289,7 @@ public class KonyaevoBot extends TelegramLongPollingBot {
 
     private void handleCallback(Update update) {
         var callback = update.getCallbackQuery();
-
-        callbackRouter.route(callback);
+        if (callback.getMessage() != null) pendingBroadcastMedia.remove(callback.getMessage().getChatId());
 
         // Answer callback to remove loading indicator
         try {
@@ -244,6 +302,7 @@ public class KonyaevoBot extends TelegramLongPollingBot {
                 log.debug("Failed to answer callback: {}", e.getMessage());
             }
         }
+        callbackRouter.route(callback);
     }
 
     // ===== Auto-login: send initial message based on saved user settings =====

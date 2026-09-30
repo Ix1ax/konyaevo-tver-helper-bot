@@ -186,12 +186,12 @@ public class NotificationServiceTest {
     private static class TestChangesParser extends ChangesParserService {
         @Override
         public String getFormattedChanges(String groupName) {
-            return "⚡️ Изменения для группы " + groupName;
+            return "Изменения для группы " + groupName;
         }
 
         @Override
         public String getFormattedChangesForTeacher(String teacherName) {
-            return "⚡️ Изменения для преподавателя " + teacherName;
+            return "Изменения для преподавателя " + teacherName;
         }
     }
 
@@ -223,6 +223,9 @@ public class NotificationServiceTest {
         final List<UserSettings> users = new ArrayList<>();
 
         @Override
+        public List<UserSettings> findByNotifyTomorrowTrueAndNotifyTime(String time) { return List.of(); }
+
+        @Override
         public List<UserSettings> findByNotifyEnabledTrueAndNotifyTime(String time) {
             List<UserSettings> matched = new ArrayList<>();
             for (UserSettings u : users) {
@@ -247,7 +250,7 @@ public class NotificationServiceTest {
 
         @Override public long countByRole(String role) { return 0; }
         @Override public long countByCourse(Integer course) { return 0; }
-        @Override public long countByNotifyEnabledTrue() {
+        @Override public long countWithNotifications() {
             return users.stream().filter(u -> Boolean.TRUE.equals(u.getNotifyEnabled())).count();
         }
         @Override public List<Long> findAllChatIds() { return Collections.emptyList(); }

@@ -30,9 +30,18 @@ public class NotificationService {
     private final ChangesParserService changesParser;
     private final MessageSender messageSender;
 
+    private final ScheduleService scheduleService;
+
     public NotificationService(UserSettingsRepository userSettingsRepo,
                                ChangesParserService changesParser,
                                MessageSender messageSender) {
+        this(userSettingsRepo, changesParser, messageSender, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public NotificationService(UserSettingsRepository userSettingsRepo, ChangesParserService changesParser,
+                               MessageSender messageSender, ScheduleService scheduleService) {
+        this.scheduleService = scheduleService;
         this.userSettingsRepo = userSettingsRepo;
         this.changesParser = changesParser;
         this.messageSender = messageSender;
@@ -47,6 +56,27 @@ public class NotificationService {
         String currentTime = LocalTime.now(MOSCOW).format(TIME_FORMAT);
         DayOfWeek currentDay = LocalDate.now(MOSCOW).getDayOfWeek();
         processNotificationsForTime(currentTime, currentDay);
+        processTomorrowNotifications(currentTime, currentDay);
+    }
+
+    public void processTomorrowNotifications(String time, DayOfWeek day) {
+        for (UserSettings user : userSettingsRepo.findByNotifyTomorrowTrueAndNotifyTime(time)) {
+            if (!user.isNotifyDayEnabled(day.getValue())) continue;
+            String tomorrow = scheduleService.getTomorrowName();
+            String text;
+            if ("student".equals(user.getRole()) && user.getGroupName() != null && !user.getGroupName().isBlank()) {
+                text = tomorrow.isEmpty() ? "<b>Завтра выходной</b>\nЗанятий нет." : scheduleService.getScheduleTextForGroup(user.getGroupName(), tomorrow);
+            } else if ("teacher".equals(user.getRole()) && user.getTeacherName() != null && !user.getTeacherName().isBlank()) {
+                text = tomorrow.isEmpty() ? "<b>Завтра выходной</b>\nЗанятий нет." : scheduleService.getScheduleTextForTeacher(user.getTeacherName(), tomorrow);
+            } else continue;
+            if (messageSender.sendDirectMessage(user.getChatId(), "<b>Расписание на завтра</b>\n\n" + text, null)
+                    == MessageSender.DirectSendResult.BLOCKED) {
+                user.setNotifyTomorrow(false);
+                userSettingsRepo.save(user);
+            }
+            try { Thread.sleep(40); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+        }
     }
 
     public void processNotificationsForTime(String currentTime) {

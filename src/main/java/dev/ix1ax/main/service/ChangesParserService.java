@@ -144,6 +144,10 @@ public class ChangesParserService {
         return changesDate;
     }
 
+    public Map<String, Map<Integer, String>> getAllChanges() {
+        return Collections.unmodifiableMap(changesByGroup);
+    }
+
     public Map<Integer, String> getChangesForGroup(String groupName) {
         return changesByGroup.getOrDefault(groupName, Collections.emptyMap());
     }
@@ -154,14 +158,14 @@ public class ChangesParserService {
     public String getFormattedChanges(String groupName) {
         Map<Integer, String> changes = getChangesForGroup(groupName);
         if (changes.isEmpty()) {
-            return "⚡️ <b>Изменения на " + HtmlUtils.escapeHtml(changesDate) + "</b>\n\n" +
-                    "👥 <b>Группа: " + HtmlUtils.escapeHtml(groupName) + "</b>\n\n" +
-                    "✨ <i>Изменений нет</i>";
+            return "<b>Изменения на " + HtmlUtils.escapeHtml(changesDate) + "</b>\n\n" +
+                    "<b>Группа: " + HtmlUtils.escapeHtml(groupName) + "</b>\n\n" +
+                    "<i>Изменений нет</i>";
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("⚡️ <b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
-        sb.append("👥 <b>Группа: ").append(HtmlUtils.escapeHtml(groupName)).append("</b>\n\n");
+        sb.append("<b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
+        sb.append("<b>Группа: ").append(HtmlUtils.escapeHtml(groupName)).append("</b>\n\n");
 
         List<Integer> slots = new ArrayList<>(changes.keySet());
         Collections.sort(slots);
@@ -169,12 +173,12 @@ public class ChangesParserService {
         for (int i = 0; i < slots.size(); i++) {
             int slot = slots.get(i);
             String changeText = changes.get(slot);
-            sb.append("🔹 <b>").append(slot).append(" пара</b>:\n");
-            String[] lines = changeText.split("\n");
+            sb.append("<b>").append(slot).append(" пара</b>:\n");
+            String[] lines = isCancellation(changeText) ? new String[]{"ОТМЕНА"} : changeText.split("\n");
             for (String line : lines) {
                 String trimmed = line.trim();
                 if (!trimmed.isEmpty()) {
-                    sb.append("   ▫️ ").append(HtmlUtils.escapeHtml(trimmed)).append("\n");
+                    sb.append("   ").append(HtmlUtils.escapeHtml(trimmed)).append("\n");
                 }
             }
             if (i < slots.size() - 1) {
@@ -187,12 +191,20 @@ public class ChangesParserService {
 
     private ScheduleParserService scheduleParser;
 
+    private final java.time.Clock clock;
+
     public ChangesParserService() {
+        this(null, java.time.Clock.system(MOSCOW));
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public ChangesParserService(@org.springframework.lang.Nullable ScheduleParserService scheduleParser) {
+        this(scheduleParser, java.time.Clock.system(MOSCOW));
+    }
+
+    ChangesParserService(ScheduleParserService scheduleParser, java.time.Clock clock) {
         this.scheduleParser = scheduleParser;
+        this.clock = clock;
     }
 
     public void setScheduleParser(ScheduleParserService scheduleParser) {
@@ -204,8 +216,8 @@ public class ChangesParserService {
      */
     public String getFormattedChangesForTeacher(String teacherName) {
         StringBuilder sb = new StringBuilder();
-        sb.append("⚡️ <b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
-        sb.append("👨‍🏫 <b>").append(HtmlUtils.escapeHtml(teacherName)).append("</b>\n\n");
+        sb.append("<b>Изменения на ").append(HtmlUtils.escapeHtml(changesDate)).append("</b>\n\n");
+        sb.append("<b>").append(HtmlUtils.escapeHtml(teacherName)).append("</b>\n\n");
 
         List<TeacherChangeEntry> changeEntries = new ArrayList<>();
         Set<String> addedKeys = new HashSet<>();
@@ -218,15 +230,15 @@ public class ChangesParserService {
             for (Map.Entry<Integer, String> slotEntry : groupSlots.entrySet()) {
                 int slot = slotEntry.getKey();
                 String val = slotEntry.getValue();
-                if (val.contains(teacherName) || containsTeacherLastName(val, teacherName)) {
+                if (teacherMatches(val, teacherName)) {
                     addedKeys.add(slot + ":" + groupName);
                     StringBuilder entrySb = new StringBuilder();
-                    entrySb.append("👥 <b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
+                    entrySb.append("<b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
                             .append(slot).append(" пара</b>:\n");
-                    for (String line : val.split("\n")) {
+                    for (String line : isCancellation(val) ? new String[]{"ОТМЕНА"} : val.split("\n")) {
                         String trimmed = line.trim();
                         if (!trimmed.isEmpty()) {
-                            entrySb.append("   ▫️ ").append(HtmlUtils.escapeHtml(trimmed)).append("\n");
+                            entrySb.append("   ").append(HtmlUtils.escapeHtml(trimmed)).append("\n");
                         }
                     }
                     changeEntries.add(new TeacherChangeEntry(slot, groupName, entrySb.toString().trim()));
@@ -253,35 +265,30 @@ public class ChangesParserService {
                             continue;
                         }
 
-                        if (isCancellation(val) && !mentionsOtherTeacher(val, teacherName)) {
-                            DaySchedule groupSchedule = scheduleParser.getScheduleForGroupAndDay(groupName, dayName);
-                            if (groupSchedule != null) {
-                                boolean hasLesson = false;
-                                for (dev.ix1ax.main.model.Lesson lesson : groupSchedule.getLessons()) {
-                                    if (lesson.getLessonNumber() == slot &&
-                                            teacherMatches(lesson.getTeacher(), teacherName)) {
-                                        if (lesson.getWeekType() == null ||
-                                                weekType == null ||
-                                                lesson.getWeekType().equalsIgnoreCase(weekType)) {
-                                            hasLesson = true;
-                                            break;
-                                        }
+                        // If not already added (not directly mentioning this teacher),
+                        // check if the teacher had a scheduled lesson in this slot for this group:
+                        DaySchedule groupSchedule = scheduleParser.getScheduleForGroupAndDay(groupName, dayName);
+                        if (groupSchedule != null) {
+                            boolean hasLesson = false;
+                            for (dev.ix1ax.main.model.Lesson lesson : groupSchedule.getLessons()) {
+                                if (lesson.getLessonNumber() == slot &&
+                                        teacherMatches(lesson.getTeacher(), teacherName)) {
+                                    if (lesson.getWeekType() == null ||
+                                            weekType == null ||
+                                            lesson.getWeekType().equalsIgnoreCase(weekType)) {
+                                        hasLesson = true;
+                                        break;
                                     }
                                 }
+                            }
 
-                                if (hasLesson) {
-                                    addedKeys.add(key);
-                                    StringBuilder entrySb = new StringBuilder();
-                                    entrySb.append("👥 <b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
-                                            .append(slot).append(" пара</b>:\n");
-                                    for (String line : val.split("\n")) {
-                                        String trimmed = line.trim();
-                                        if (!trimmed.isEmpty()) {
-                                            entrySb.append("   ▫️ ").append(HtmlUtils.escapeHtml(trimmed)).append("\n");
-                                        }
-                                    }
-                                    changeEntries.add(new TeacherChangeEntry(slot, groupName, entrySb.toString().trim()));
-                                }
+                            if (hasLesson) {
+                                addedKeys.add(key);
+                                StringBuilder entrySb = new StringBuilder();
+                                entrySb.append("<b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
+                                        .append(slot).append(" пара</b>:\n");
+                                entrySb.append("   <b>ОТМЕНА</b>\n");
+                                changeEntries.add(new TeacherChangeEntry(slot, groupName, entrySb.toString().trim()));
                             }
                         }
                     }
@@ -296,7 +303,7 @@ public class ChangesParserService {
         );
 
         if (changeEntries.isEmpty()) {
-            sb.append("✨ <i>Изменений нет</i>");
+            sb.append("<i>Изменений нет</i>");
         } else {
             for (int i = 0; i < changeEntries.size(); i++) {
                 sb.append(changeEntries.get(i).formattedText);
@@ -323,14 +330,39 @@ public class ChangesParserService {
 
     private static final java.time.ZoneId MOSCOW = java.time.ZoneId.of("Europe/Moscow");
     private static final java.util.regex.Pattern DATE_PATTERN =
-            java.util.regex.Pattern.compile("(\\d{1,2})\\s+([а-яёА-ЯЁ]+)");
+            java.util.regex.Pattern.compile("(\\d{1,2})\\s+([а-яёА-ЯЁ]+)(?:\\s+(\\d{4}))?");
     private static final java.util.regex.Pattern TEACHER_INITIALS_PATTERN =
             java.util.regex.Pattern.compile("(?U)[А-ЯЁ][а-яё]{2,}\\s+[А-ЯЁ]\\.\\s*[А-ЯЁ]?\\.?");
 
-    private boolean isCancellation(String text) {
+    public String getTargetDayName() {
+        return extractDayName(changesDate);
+    }
+
+    /** Старые замены остаются в списке публикаций, но не попадают в текущую неделю. */
+    public String getOverlayDayName() {
+        java.time.LocalDate date = parseDateFromChangesHeader(changesDate);
+        if (date == null) return null;
+        java.time.LocalDate today = java.time.LocalDate.now(clock);
+        java.time.LocalDate monday = today.with(java.time.DayOfWeek.MONDAY);
+        java.time.LocalDate lastDay = monday.plusDays(6);
+        if (today.plusDays(1).isAfter(lastDay)) lastDay = today.plusDays(1);
+        if (date.isBefore(monday) || date.isAfter(lastDay)) return null;
+        return switch (date.getDayOfWeek()) {
+            case MONDAY -> "Понедельник";
+            case TUESDAY -> "Вторник";
+            case WEDNESDAY -> "Среда";
+            case THURSDAY -> "Четверг";
+            case FRIDAY -> "Пятница";
+            case SATURDAY -> "Суббота";
+            case SUNDAY -> "Воскресенье";
+        };
+    }
+
+    public boolean isCancellation(String text) {
         if (text == null) return false;
         String lower = text.toLowerCase();
-        return lower.contains("отмен") || lower.contains("снят");
+        return lower.contains("отмен") || lower.contains("снят")
+                || lower.matches("(?s).*\\bпар\\s+нет\\b.*");
     }
 
     private boolean mentionsOtherTeacher(String text, String teacherName) {
@@ -345,13 +377,21 @@ public class ChangesParserService {
         return false;
     }
 
-    private boolean teacherMatches(String scheduledTeacher, String targetTeacher) {
-        if (scheduledTeacher == null || targetTeacher == null) return false;
-        if (scheduledTeacher.contains(targetTeacher)) return true;
-        return containsTeacherLastName(scheduledTeacher, targetTeacher);
+    public boolean teacherMatches(String text, String teacherName) {
+        if (text == null || teacherName == null || teacherName.isBlank()) return false;
+        var names = TEACHER_INITIALS_PATTERN.matcher(text);
+        boolean foundNames = false;
+        String target = teacherName.replaceAll("[\\s.]", "").toLowerCase(Locale.ROOT);
+        while (names.find()) {
+            foundNames = true;
+            String candidate = names.group().replaceAll("[\\s.]", "").toLowerCase(Locale.ROOT);
+            if (candidate.equals(target)) return true;
+        }
+        // По одной фамилии ищем лишь тогда, когда в ячейке нет ФИО с инициалами.
+        return !foundNames && containsTeacherLastName(text, teacherName);
     }
 
-    private boolean containsTeacherLastName(String text, String teacherName) {
+    public boolean containsTeacherLastName(String text, String teacherName) {
         if (text == null || teacherName == null) return false;
         String[] parts = teacherName.trim().split("\\s+");
         if (parts.length > 0 && !parts[0].isEmpty()) {
@@ -363,7 +403,7 @@ public class ChangesParserService {
         return false;
     }
 
-    private String extractDayName(String dateStr) {
+    public String extractDayName(String dateStr) {
         if (dateStr == null || dateStr.isBlank()) return null;
         String lower = dateStr.toLowerCase();
         if (lower.contains("понедельник")) return "Понедельник";
@@ -410,7 +450,12 @@ public class ChangesParserService {
             else if (monthStr.startsWith("дек")) month = 12;
             else return null;
 
-            int year = java.time.LocalDate.now(MOSCOW).getYear();
+            java.time.LocalDate now = java.time.LocalDate.now(clock);
+            int year = m.group(3) != null ? Integer.parseInt(m.group(3)) : now.getYear();
+            if (m.group(3) == null) {
+                if (now.getMonthValue() == 12 && month == 1) year++;
+                if (now.getMonthValue() == 1 && month == 12) year--;
+            }
             return java.time.LocalDate.of(year, month, day);
         } catch (Exception e) {
             return null;
@@ -420,21 +465,12 @@ public class ChangesParserService {
     private String detectWeekTypeForDate(String dateStr) {
         java.time.LocalDate date = parseDateFromChangesHeader(dateStr);
         if (date == null) {
-            date = java.time.LocalDate.now(MOSCOW);
+            date = java.time.LocalDate.now(clock);
         }
-        int year = date.getYear();
-        java.time.LocalDate semesterStart;
-        if (date.getMonthValue() >= 9) {
-            semesterStart = java.time.LocalDate.of(year, 9, 1);
-        } else if (date.getMonthValue() <= 1) {
-            semesterStart = java.time.LocalDate.of(year - 1, 9, 1);
-        } else {
-            semesterStart = java.time.LocalDate.of(year, 2, 1);
-        }
-        java.time.LocalDate startMonday = semesterStart.with(java.time.DayOfWeek.MONDAY);
-        long daysBetween = java.time.temporal.ChronoUnit.DAYS.between(startMonday, date);
-        long weekNumber = (daysBetween / 7) + 1;
-        boolean isRed = (weekNumber % 2 != 0);
-        return isRed ? dev.ix1ax.main.model.Lesson.WEEK_RED : dev.ix1ax.main.model.Lesson.WEEK_BLUE;
+        return AcademicWeek.typeFor(date);
+    }
+
+    public String getTargetWeekType() {
+        return detectWeekTypeForDate(changesDate);
     }
 }

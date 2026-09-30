@@ -9,8 +9,16 @@ import jakarta.persistence.Table;
  * Stores user preferences (selected role, course, group, teacher).
  */
 @Entity
-@Table(name = "user_settings")
+@Table(name = "user_settings", indexes = { @jakarta.persistence.Index(name="idx_user_last_active", columnList="last_active"), @jakarta.persistence.Index(name="idx_user_first_seen", columnList="first_seen") })
 public class UserSettings {
+
+    @Column(name = "first_seen", updatable = false)
+    private java.time.Instant firstSeen;
+    @Column(name = "last_active", updatable = false)
+    private java.time.Instant lastActive;
+
+    public java.time.Instant getFirstSeen() { return firstSeen; }
+    public java.time.Instant getLastActive() { return lastActive; }
 
     @Id
     @Column(name = "chat_id")
@@ -46,11 +54,18 @@ public class UserSettings {
     @Column(name = "teacher_name")
     private String teacherName;
 
+    @Column(name = "notify_tomorrow")
+    private Boolean notifyTomorrow = false;
+
+    public Boolean getNotifyTomorrow() { return notifyTomorrow; }
+    public void setNotifyTomorrow(Boolean value) { notifyTomorrow = value; }
+
     public UserSettings() {
     }
 
     public UserSettings(Long chatId) {
         this.chatId = chatId;
+        this.firstSeen = java.time.Instant.now();
     }
 
     public Long getChatId() {

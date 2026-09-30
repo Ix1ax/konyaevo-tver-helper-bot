@@ -91,11 +91,11 @@ public class Lesson {
     public String format() {
         StringBuilder sb = new StringBuilder();
         if (WEEK_RED.equals(weekType)) {
-            sb.append("🔴 <b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · <i>Красная неделя</i>\n");
+            sb.append("<b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · 🔴 <i>Красная неделя</i>\n");
         } else if (WEEK_BLUE.equals(weekType)) {
-            sb.append("🔵 <b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · <i>Синяя неделя</i>\n");
+            sb.append("<b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · 🔵 <i>Синяя неделя</i>\n");
         } else {
-            sb.append("🔹 <b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code>\n");
+            sb.append("<b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code>\n");
         }
 
         sb.append("📖 <b>").append(HtmlUtils.escapeHtml(subject)).append("</b>\n");
@@ -114,11 +114,11 @@ public class Lesson {
     public String formatForTeacher(String groupName) {
         StringBuilder sb = new StringBuilder();
         if (WEEK_RED.equals(weekType)) {
-            sb.append("🔴 <b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · <i>Красная неделя</i>\n");
+            sb.append("<b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · 🔴 <i>Красная неделя</i>\n");
         } else if (WEEK_BLUE.equals(weekType)) {
-            sb.append("🔵 <b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · <i>Синяя неделя</i>\n");
+            sb.append("<b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code> · 🔵 <i>Синяя неделя</i>\n");
         } else {
-            sb.append("🔹 <b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code>\n");
+            sb.append("<b>").append(lessonNumber).append(" пара</b> · <code>").append(time).append("</code>\n");
         }
 
         sb.append("📖 <b>").append(HtmlUtils.escapeHtml(subject)).append("</b>\n");

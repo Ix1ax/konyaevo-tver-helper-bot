@@ -13,6 +13,16 @@ import java.util.Set;
  */
 public final class KeyboardFactory {
 
+    private static volatile String miniAppUrl = null;
+
+    public static void setMiniAppUrl(String url) {
+        miniAppUrl = (url != null && !url.isBlank()) ? url.trim() : null;
+    }
+
+    public static String getMiniAppUrl() {
+        return miniAppUrl;
+    }
+
     private KeyboardFactory() {
     }
 
@@ -22,7 +32,7 @@ public final class KeyboardFactory {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         rows.add(List.of(
                 button("🎓 Я студент", "role:student"),
-                button("💼 Я преподаватель", "role:teacher")
+                button("👤 Я преподаватель", "role:teacher")
         ));
         return new InlineKeyboardMarkup(rows);
     }
@@ -39,7 +49,7 @@ public final class KeyboardFactory {
             }
             rows.add(row);
         }
-        rows.add(List.of(button("🚪 Выйти / Сменить роль", "logout")));
+        rows.add(List.of(button("Выйти / Сменить роль", "logout")));
         return new InlineKeyboardMarkup(rows);
     }
 
@@ -53,22 +63,27 @@ public final class KeyboardFactory {
             }
             rows.add(row);
         }
-        rows.add(List.of(button("‹ Назад к курсам", "back:courses")));
+        rows.add(List.of(button("◀ Назад к курсам", "back:courses")));
         return new InlineKeyboardMarkup(rows);
     }
 
     public static InlineKeyboardMarkup buildStudentActionsKeyboard(String groupName) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        if (miniAppUrl != null && !miniAppUrl.isBlank()) {
+            rows.add(List.of(webAppButton("📱 Открыть приложение", miniAppUrl)));
+        }
         rows.add(List.of(
-                button("📅 Сегодня", "s_today:" + groupName),
-                button("📆 Завтра", "s_tomorrow:" + groupName)
+                button("📅 Сегодня", "view:today"),
+                button("⏭ Завтра", "view:tomorrow")
         ));
         rows.add(List.of(
-                button("🗓 Вся неделя", "s_week:" + groupName),
-                button("⚡️ Изменения", "s_changes:" + groupName)
+                button("🗓 Неделя", "view:week"),
+                button("🔄 Замены", "view:changes")
         ));
         rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
-        rows.add(List.of(button("🚪 Сменить группу", "logout")));
+        rows.add(List.of(button("❔ Помощь", "help")));
+        rows.add(List.of(button("👥 Сменить группу", "role:student")));
+        rows.add(List.of(button("🔄 Сменить роль", "logout")));
         return new InlineKeyboardMarkup(rows);
     }
 
@@ -87,32 +102,44 @@ public final class KeyboardFactory {
         if (!row.isEmpty()) {
             rows.add(row);
         }
-        rows.add(List.of(button("🚪 Выйти / Сменить роль", "logout")));
+        rows.add(List.of(button("Выйти / Сменить роль", "logout")));
         return new InlineKeyboardMarkup(rows);
     }
 
     public static InlineKeyboardMarkup buildTeacherListKeyboard(List<String> teachers, String letter) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         for (String teacher : teachers) {
-            rows.add(List.of(button(teacher, "teacher:" + teacher)));
+            rows.add(List.of(button(teacher, "teacherid:" + java.util.UUID.nameUUIDFromBytes(teacher.getBytes(java.nio.charset.StandardCharsets.UTF_8)))));
         }
-        rows.add(List.of(button("‹ Назад к буквам", "back:tletters")));
+        rows.add(List.of(button("◀ Назад к буквам", "back:tletters")));
         return new InlineKeyboardMarkup(rows);
     }
 
     public static InlineKeyboardMarkup buildTeacherActionsKeyboard(String teacherName) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        if (miniAppUrl != null && !miniAppUrl.isBlank()) {
+            rows.add(List.of(webAppButton("📱 Открыть приложение", miniAppUrl)));
+        }
         rows.add(List.of(
-                button("📅 Сегодня", "t_today:" + teacherName),
-                button("📆 Завтра", "t_tomorrow:" + teacherName)
+                button("📅 Сегодня", "view:today"),
+                button("⏭ Завтра", "view:tomorrow")
         ));
         rows.add(List.of(
-                button("🗓 Вся неделя", "t_week:" + teacherName),
-                button("⚡️ Изменения", "t_changes:" + teacherName)
+                button("🗓 Неделя", "view:week"),
+                button("🔄 Замены", "view:changes")
         ));
         rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
-        rows.add(List.of(button("🚪 Сменить преподавателя", "logout")));
+        rows.add(List.of(button("❔ Помощь", "help")));
+        rows.add(List.of(button("👤 Сменить преподавателя", "role:teacher")));
+        rows.add(List.of(button("🔄 Сменить роль", "logout")));
         return new InlineKeyboardMarkup(rows);
+    }
+
+    public static InlineKeyboardMarkup buildScheduleKeyboard() {
+        return new InlineKeyboardMarkup(List.of(
+                List.of(button("📅 Сегодня", "view:today"), button("⏭ Завтра", "view:tomorrow")),
+                List.of(button("🗓 Неделя", "view:week"), button("🔄 Замены", "view:changes")),
+                List.of(button("‹ Меню", "dashboard"))));
     }
 
     // ===== Admin keyboards =====
@@ -121,28 +148,29 @@ public final class KeyboardFactory {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         rows.add(List.of(
                 button("📊 Статистика", "admin:stats"),
-                button("🔄 Обновить кэш", "admin:refresh")
+                button("🔄 Обновить данные", "admin:refresh")
         ));
         rows.add(List.of(
-                button("📢 Сделать рассылку", "admin:broadcast_info")
+                button("📣 Рассылка", "admin:broadcast_info")
         ));
+        rows.add(List.of(button("❔ Помощь", "help")));
         rows.add(List.of(
-                button("🚪 Закрыть", "admin:close")
+                button("Закрыть", "admin:close")
         ));
         return new InlineKeyboardMarkup(rows);
     }
 
     public static InlineKeyboardMarkup buildAdminBackKeyboard() {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        rows.add(List.of(button("‹ Назад в админку", "admin:menu")));
+        rows.add(List.of(button("◀ Назад в админку", "admin:menu")));
         return new InlineKeyboardMarkup(rows);
     }
 
     public static InlineKeyboardMarkup buildBroadcastConfirmKeyboard(String draftId) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         rows.add(List.of(
-                button("✅ Отправить всем", "admin:bc_send:" + draftId),
-                button("❌ Отменить", "admin:bc_cancel:" + draftId)
+                button("📣 Отправить всем", "admin:bc_send:" + draftId),
+                button("✖ Отменить", "admin:bc_cancel:" + draftId)
         ));
         return new InlineKeyboardMarkup(rows);
     }
@@ -153,16 +181,16 @@ public final class KeyboardFactory {
      * Notification settings screen with current status.
      */
     public static InlineKeyboardMarkup buildNotifySettingsKeyboard(boolean enabled, String backCallback) {
+        return buildNotifySettingsKeyboard(enabled, false, backCallback);
+    }
+
+    public static InlineKeyboardMarkup buildNotifySettingsKeyboard(boolean enabled, boolean tomorrow, String backCallback) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        if (enabled) {
-            rows.add(List.of(button("⏰ Изменить время", "notify:change_time")));
-            rows.add(List.of(button("📅 Дни недели", "notify:days")));
-            rows.add(List.of(button("🔕 Выключить", "notify:disable")));
-        } else {
-            rows.add(List.of(button("🔔 Включить", "notify:enable")));
-            rows.add(List.of(button("📅 Дни недели", "notify:days")));
-        }
-        rows.add(List.of(button("‹ Назад", backCallback)));
+        rows.add(List.of(button("🔄 Замены: " + (enabled ? "вкл" : "выкл"), enabled ? "notify:disable" : "notify:enable")));
+        if (enabled || tomorrow) rows.add(List.of(button("🕒 Изменить время", "notify:change_time")));
+        rows.add(List.of(button("🗓 Дни недели", "notify:days")));
+        rows.add(List.of(button("⏭ Завтрашние пары: " + (tomorrow ? "вкл" : "выкл"), "notify:tomorrow")));
+        rows.add(List.of(button("◀ Назад", backCallback)));
         return new InlineKeyboardMarkup(rows);
     }
 
@@ -178,7 +206,7 @@ public final class KeyboardFactory {
         List<InlineKeyboardButton> row1 = new ArrayList<>();
         for (int d = 1; d <= 4; d++) {
             boolean active = enabledDays != null && enabledDays.contains(d);
-            String icon = active ? "✅ " : "❌ ";
+            String icon = active ? "✓ " : "· ";
             row1.add(button(icon + days[d], "notify:day:" + d));
         }
         rows.add(row1);
@@ -187,7 +215,7 @@ public final class KeyboardFactory {
         List<InlineKeyboardButton> row2 = new ArrayList<>();
         for (int d = 5; d <= 7; d++) {
             boolean active = enabledDays != null && enabledDays.contains(d);
-            String icon = active ? "✅ " : "❌ ";
+            String icon = active ? "✓ " : "· ";
             row2.add(button(icon + days[d], "notify:day:" + d));
         }
         rows.add(row2);
@@ -199,7 +227,7 @@ public final class KeyboardFactory {
         ));
 
         // Row 4: Back
-        rows.add(List.of(button("‹ Назад к уведомлениям", backCallback)));
+        rows.add(List.of(button("◀ Назад к уведомлениям", backCallback)));
 
         return new InlineKeyboardMarkup(rows);
     }
@@ -224,8 +252,8 @@ public final class KeyboardFactory {
                 button("20:00", "notify:time:20:00"),
                 button("21:00", "notify:time:21:00")
         ));
-        rows.add(List.of(button("⌨️ Ввести своё время", "notify:custom_time")));
-        rows.add(List.of(button("‹ Назад", backCallback)));
+        rows.add(List.of(button("Ввести своё время", "notify:custom_time")));
+        rows.add(List.of(button("◀ Назад", backCallback)));
         return new InlineKeyboardMarkup(rows);
     }
 
@@ -244,6 +272,16 @@ public final class KeyboardFactory {
         InlineKeyboardButton btn = new InlineKeyboardButton();
         btn.setText(text);
         btn.setCallbackData(callbackData);
+        return btn;
+    }
+
+    /**
+     * Create an inline keyboard button that opens a Telegram Mini App.
+     */
+    public static InlineKeyboardButton webAppButton(String text, String url) {
+        InlineKeyboardButton btn = new InlineKeyboardButton();
+        btn.setText(text);
+        btn.setWebApp(new org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo(url));
         return btn;
     }
 }

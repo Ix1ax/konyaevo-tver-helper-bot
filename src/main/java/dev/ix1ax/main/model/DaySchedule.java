@@ -66,7 +66,7 @@ public class DaySchedule {
      */
     public String format() {
         if (!hasLessons()) {
-            return "<b>" + dayName + "</b>\n✨ <i>Пар нет — свободный день</i>";
+            return "<b>" + dayName + "</b>\n<i>Пар нет — свободный день</i>";
         }
         sortLessons();
         StringBuilder sb = new StringBuilder();
@@ -85,7 +85,7 @@ public class DaySchedule {
      */
     public String formatForTeacher() {
         if (!hasLessons()) {
-            return "<b>" + dayName + "</b>\n✨ <i>Пар нет — свободный день</i>";
+            return "<b>" + dayName + "</b>\n<i>Пар нет — свободный день</i>";
         }
         sortLessons();
         StringBuilder sb = new StringBuilder();

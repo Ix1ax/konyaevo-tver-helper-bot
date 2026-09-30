@@ -36,12 +36,21 @@ public class AdminService {
     private final ChangesParserService changesParser;
     private final ScheduleService scheduleService;
     private final MessageSender messageSender;
+    private final UserActivityService activity;
 
     public AdminService(UserSettingsRepository userSettingsRepo,
                         ScheduleParserService scheduleParser,
                         ChangesParserService changesParser,
                         ScheduleService scheduleService,
                         MessageSender messageSender) {
+        this(userSettingsRepo, scheduleParser, changesParser, scheduleService, messageSender, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminService(UserSettingsRepository userSettingsRepo, ScheduleParserService scheduleParser,
+                        ChangesParserService changesParser, ScheduleService scheduleService,
+                        MessageSender messageSender, UserActivityService activity) {
+        this.activity = activity;
         this.userSettingsRepo = userSettingsRepo;
         this.scheduleParser = scheduleParser;
         this.changesParser = changesParser;
@@ -80,7 +89,7 @@ public class AdminService {
         long totalUsers = userSettingsRepo.count();
         long studentCount = userSettingsRepo.countByRole("student");
         long teacherCount = userSettingsRepo.countByRole("teacher");
-        long notifyCount = userSettingsRepo.countByNotifyEnabledTrue();
+        long notifyCount = userSettingsRepo.countWithNotifications();
         long unconfiguredCount = Math.max(0, totalUsers - studentCount - teacherCount);
 
         long course1 = userSettingsRepo.countByCourse(1);
@@ -101,9 +110,9 @@ public class AdminService {
         int totalTeachers = scheduleParser.getAllTeachers().size();
 
         StringBuilder sb = new StringBuilder();
-        sb.append("📊 <b>Панель статистики Коняево-бота</b>\n\n");
+        sb.append("<b>Панель статистики Коняево-бота</b>\n\n");
 
-        sb.append("👥 <b>Пользователи:</b>\n");
+        sb.append("<b>Пользователи:</b>\n");
         sb.append(" • Всего в базе: <b>").append(totalUsers).append("</b>\n");
         sb.append(" • Студенты: <b>").append(studentCount).append("</b>\n");
         sb.append(" • Преподаватели: <b>").append(teacherCount).append("</b>\n");
@@ -112,14 +121,22 @@ public class AdminService {
             sb.append(" • В процессе выбора: <b>").append(unconfiguredCount).append("</b>\n");
         }
 
-        sb.append("\n🎓 <b>Студенты по курсам:</b>\n");
+        if (activity != null) {
+            var active = activity.snapshot();
+            sb.append("\n<b>Активность:</b>\n")
+                    .append(" • За 24 часа: <b>").append(active.day()).append("</b>\n")
+                    .append(" • За 7 дней: <b>").append(active.week()).append("</b>\n")
+                    .append(" • За 30 дней: <b>").append(active.month()).append("</b>\n")
+                    .append(" • Новых за 7 дней: <b>").append(active.newWeek()).append("</b>\n");
+        }
+        sb.append("\n<b>Студенты по курсам:</b>\n");
         sb.append(" • 1 курс: <b>").append(course1).append("</b>\n");
         sb.append(" • 2 курс: <b>").append(course2).append("</b>\n");
         sb.append(" • 3 курс: <b>").append(course3).append("</b>\n");
         sb.append(" • 4 курс: <b>").append(course4).append("</b>\n");
 
         if (!topGroups.isEmpty()) {
-            sb.append("\n🏆 <b>ТОП-5 групп по подписчикам:</b>\n");
+            sb.append("\n<b>ТОП-5 групп по подписчикам:</b>\n");
             int rank = 1;
             for (Object[] row : topGroups) {
                 String groupName = (String) row[0];
@@ -129,12 +146,12 @@ public class AdminService {
             }
         }
 
-        sb.append("\n🏛 <b>Данные расписания:</b>\n");
+        sb.append("\n<b>Данные расписания:</b>\n");
         sb.append(" • Неделя: <b>").append(currentWeek).append("</b>\n");
         sb.append(" • Всего групп в расписании: <b>").append(totalScheduleGroups).append("</b>\n");
         sb.append(" • Преподавателей: <b>").append(totalTeachers).append("</b>\n");
 
-        sb.append("\n⚙️ <b>Сервер:</b>\n");
+        sb.append("\n<b>Сервер:</b>\n");
         sb.append(" • Память JVM: <b>").append(usedMemoryMb).append(" MB / ").append(maxMemoryMb).append(" MB</b>\n");
 
         return sb.toString();
@@ -153,25 +170,36 @@ public class AdminService {
 
     // ===== Broadcast System =====
 
-    public record BroadcastDraft(String id, long adminChatId, String text, long createdAt) {
+    public record BroadcastDraft(String id, long adminChatId, String text, long createdAt, dev.ix1ax.main.bot.BroadcastMedia media) {
         public BroadcastDraft(String id, long adminChatId, String text) {
-            this(id, adminChatId, text, System.currentTimeMillis());
+            this(id, adminChatId, text, System.currentTimeMillis(), null);
         }
     }
 
     public BroadcastDraft createDraft(long adminChatId, String text) {
+        return createDraft(adminChatId, text, null);
+    }
+
+    public BroadcastDraft createMediaDraft(long adminChatId, dev.ix1ax.main.bot.BroadcastMedia media) {
+        return createDraft(adminChatId, "", media);
+    }
+
+    private BroadcastDraft createDraft(long adminChatId, String text, dev.ix1ax.main.bot.BroadcastMedia media) {
+        if (!isAdmin(adminChatId)) throw new IllegalArgumentException("Рассылка доступна только администратору");
         // Purge drafts older than 1 hour
         long now = System.currentTimeMillis();
         drafts.entrySet().removeIf(e -> now - e.getValue().createdAt() > 3600_000);
 
-        String id = UUID.randomUUID().toString().substring(0, 8);
-        BroadcastDraft draft = new BroadcastDraft(id, adminChatId, text);
+        String id = UUID.randomUUID().toString();
+        BroadcastDraft draft = new BroadcastDraft(id, adminChatId, text, now, media);
         drafts.put(id, draft);
         return draft;
     }
 
     public BroadcastDraft getDraft(String id) {
-        return drafts.get(id);
+        BroadcastDraft draft = drafts.get(id);
+        if (draft != null && System.currentTimeMillis() - draft.createdAt() > 3600_000) { drafts.remove(id); return null; }
+        return draft;
     }
 
     public void removeDraft(String id) {
@@ -190,7 +218,7 @@ public class AdminService {
      * Asynchronously execute broadcast to all registered chat IDs in database.
      */
     public void startBroadcast(String draftId, int statusMessageId) {
-        BroadcastDraft draft = drafts.get(draftId);
+        BroadcastDraft draft = getDraft(draftId);
         if (draft == null) {
             log.warn("[BROADCAST] Cannot start: draft {} not found", draftId);
             return;
@@ -201,16 +229,18 @@ public class AdminService {
 
         if (!broadcastRunning.compareAndSet(false, true)) {
             messageSender.editMessage(adminChatId, statusMessageId,
-                    "⚠️ <i>В данный момент уже запущена другая рассылка. Пожалуйста, дождитесь её окончания.</i>",
+                    "<i>В данный момент уже запущена другая рассылка. Пожалуйста, дождитесь её окончания.</i>",
                     KeyboardFactory.buildAdminBackKeyboard());
             return;
         }
 
+        removeDraft(draftId);
         messageSender.editMessage(adminChatId, statusMessageId,
-                "⏳ <b>Рассылка запущена...</b>\n\nИдёт отправка сообщений пользователям бота. Это может занять некоторое время.",
+                "<b>Рассылка запущена...</b>\n\nИдёт отправка сообщений пользователям бота. Это может занять некоторое время.",
                 null);
 
         CompletableFuture.runAsync(() -> {
+            try {
             long startTime = System.currentTimeMillis();
             List<Long> chatIds = userSettingsRepo.findAllChatIds();
             int total = chatIds.size();
@@ -223,7 +253,7 @@ public class AdminService {
             for (Long targetChatId : chatIds) {
                 if (targetChatId == null) continue;
 
-                MessageSender.DirectSendResult res = messageSender.sendDirectMessage(targetChatId, text, null);
+                MessageSender.DirectSendResult res = deliver(targetChatId, draft);
                 if (res == MessageSender.DirectSendResult.SUCCESS) {
                     sent++;
                 } else if (res == MessageSender.DirectSendResult.BLOCKED) {
@@ -236,7 +266,7 @@ public class AdminService {
                         break;
                     }
                     // Retry once after rate limit wait
-                    MessageSender.DirectSendResult retryRes = messageSender.sendDirectMessage(targetChatId, text, null);
+                    MessageSender.DirectSendResult retryRes = deliver(targetChatId, draft);
                     if (retryRes == MessageSender.DirectSendResult.SUCCESS) {
                         sent++;
                     } else if (retryRes == MessageSender.DirectSendResult.BLOCKED) {
@@ -257,21 +287,30 @@ public class AdminService {
                 }
             }
 
-            broadcastRunning.set(false);
-            removeDraft(draftId);
 
             double duration = (System.currentTimeMillis() - startTime) / 1000.0;
             log.info("[BROADCAST COMPLETE] Sent to {} users (success={}, blocked={}, failed={}) in {}s",
                     total, sent, blocked, failed, String.format("%.1f", duration));
 
-            String report = "📢 <b>Отчёт о рассылке</b>\n\n" +
-                    "⏱ Время выполнения: <b>" + String.format("%.1f", duration) + " сек.</b>\n" +
-                    "👥 Всего получателей: <b>" + total + "</b>\n" +
-                    "✅ Успешно доставлено: <b>" + sent + "</b>\n" +
-                    "🚫 Заблокировали бота: <b>" + blocked + "</b>\n" +
-                    "⚠️ Ошибок отправки: <b>" + failed + "</b>";
+            String report = "<b>Отчёт о рассылке</b>\n\n" +
+                    "Время выполнения: <b>" + String.format("%.1f", duration) + " сек.</b>\n" +
+                    "Всего получателей: <b>" + total + "</b>\n" +
+                    "Успешно доставлено: <b>" + sent + "</b>\n" +
+                    "Заблокировали бота: <b>" + blocked + "</b>\n" +
+                    "Ошибок отправки: <b>" + failed + "</b>";
 
             messageSender.sendDirectMessage(adminChatId, report, KeyboardFactory.buildAdminBackKeyboard());
+            } catch (Exception e) {
+                log.error("Рассылка завершилась с ошибкой", e);
+                messageSender.sendDirectMessage(adminChatId, "<b>Рассылка прервана</b>\nНе удалось завершить отправку. Проверьте журнал сервера.", KeyboardFactory.buildAdminBackKeyboard());
+            } finally {
+                broadcastRunning.set(false);
+                removeDraft(draftId);
+            }
         });
+    }    private MessageSender.DirectSendResult deliver(long chatId, BroadcastDraft draft) {
+        return draft.media() == null ? messageSender.sendDirectMessage(chatId, draft.text(), null)
+                : messageSender.sendDirectMedia(chatId, draft.media());
     }
+
 }

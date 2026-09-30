@@ -21,6 +21,32 @@ public class MessageSender {
 
     private final ScheduleService scheduleService;
     private AbsSender bot;
+    private record Screen(String token, java.util.List<String> pages, InlineKeyboardMarkup keyboard, long created) {}
+    private final java.util.Map<Long, Screen> screens = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public boolean showPage(long chatId, int messageId, String callback) {
+        Screen screen = screens.get(chatId);
+        String[] parts = callback.split(":");
+        if (screen == null || parts.length != 3 || !screen.token().equals(parts[1]) ||
+                System.currentTimeMillis() - screen.created() > 3600000) return false;
+        try {
+            int page = Integer.parseInt(parts[2]);
+            if (page < 0 || page >= screen.pages().size()) return false;
+            editSingle(chatId, messageId, screen.pages().get(page), pageKeyboard(screen, page));
+            return true;
+        } catch (NumberFormatException ignored) { return false; }
+    }
+
+    private InlineKeyboardMarkup pageKeyboard(Screen screen, int page) {
+        var rows = new java.util.ArrayList<java.util.List<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton>>();
+        var nav = new java.util.ArrayList<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton>();
+        if (page > 0) nav.add(org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder().text("‹").callbackData("page:" + screen.token() + ":" + (page - 1)).build());
+        nav.add(org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder().text((page + 1) + " / " + screen.pages().size()).callbackData("page:" + screen.token() + ":" + page).build());
+        if (page + 1 < screen.pages().size()) nav.add(org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder().text("›").callbackData("page:" + screen.token() + ":" + (page + 1)).build());
+        rows.add(nav);
+        if (screen.keyboard() != null) rows.addAll(screen.keyboard().getKeyboard());
+        return new InlineKeyboardMarkup(rows);
+    }
 
     public MessageSender(ScheduleService scheduleService) {
         this.scheduleService = scheduleService;
@@ -39,14 +65,25 @@ public class MessageSender {
     public void sendNewMessage(long chatId, String text, InlineKeyboardMarkup keyboard, String logContext) {
         SendMessage msg = new SendMessage();
         msg.setChatId(String.valueOf(chatId));
-        msg.setText(text);
+        var pages = dev.ix1ax.main.util.TelegramText.pages(text);
+        Screen screen = pages.size() > 1 ? new Screen(java.util.UUID.randomUUID().toString().substring(0, 8), pages, keyboard, System.currentTimeMillis()) : null;
+        msg.setText(pages.get(0));
         msg.setParseMode("HTML");
-        msg.setReplyMarkup(keyboard);
+        msg.setReplyMarkup(screen == null ? keyboard : pageKeyboard(screen, 0));
 
         try {
             Message sent = (Message) bot.execute(msg);
             UserSettings user = scheduleService.getOrCreateUser(chatId);
+            Integer oldId = user.getMessageId();
             user.setMessageId(sent.getMessageId());
+            if (screen == null) screens.remove(chatId); else screens.put(chatId, screen);
+            if (oldId != null && !oldId.equals(sent.getMessageId())) {
+                try {
+                    bot.execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
+                            .chatId(Long.toString(chatId)).messageId(oldId)
+                            .replyMarkup(new InlineKeyboardMarkup(java.util.List.of())).build());
+                } catch (Exception ignored) { /* Старое сообщение могло быть удалено пользователем. */ }
+            }
             scheduleService.saveUser(user);
             log.info("[SENT SUCCESS] {} to chatId: {} (msgId: {})", logContext, chatId, sent.getMessageId());
         } catch (Exception e) {
@@ -58,9 +95,19 @@ public class MessageSender {
      * Edit an existing message. Falls back to sending a new message if editing fails.
      */
     public void editMessage(long chatId, int messageId, String text, InlineKeyboardMarkup keyboard) {
-        // Telegram message limit is 4096 chars — truncate safely
-        text = truncateIfNeeded(text);
+        var pages = dev.ix1ax.main.util.TelegramText.pages(text);
+        screens.entrySet().removeIf(entry -> System.currentTimeMillis() - entry.getValue().created() > 3600000);
+        if (pages.size() > 1) {
+            Screen screen = new Screen(java.util.UUID.randomUUID().toString().substring(0, 8), pages, keyboard, System.currentTimeMillis());
+            screens.put(chatId, screen);
+            editSingle(chatId, messageId, pages.get(0), pageKeyboard(screen, 0));
+        } else {
+            screens.remove(chatId);
+            editSingle(chatId, messageId, text, keyboard);
+        }
+    }
 
+    private void editSingle(long chatId, int messageId, String text, InlineKeyboardMarkup keyboard) {
         EditMessageText edit = new EditMessageText();
         edit.setChatId(String.valueOf(chatId));
         edit.setMessageId(messageId);
@@ -70,7 +117,7 @@ public class MessageSender {
 
         try {
             bot.execute(edit);
-            log.info("[SCREEN UPDATE] Edited msgId: {} for chatId: {}", messageId, chatId);
+            log.debug("[SCREEN UPDATE] Edited msgId: {} for chatId: {}", messageId, chatId);
         } catch (Exception e) {
             if (TelegramErrorClassifier.isUserBlockedError(e)) {
                 log.warn("[USER BLOCKED] ChatId {}: bot was blocked by user.", chatId);
@@ -105,9 +152,18 @@ public class MessageSender {
      * Send a standalone message (e.g. broadcast or admin report) without modifying user settings session.
      */
     public DirectSendResult sendDirectMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
+        var pages = dev.ix1ax.main.util.TelegramText.pages(text);
+        for (int i = 0; i < pages.size(); i++) {
+            var result = sendDirectPage(chatId, pages.get(i), i == pages.size() - 1 ? keyboard : null);
+            if (result != DirectSendResult.SUCCESS) return result;
+        }
+        return DirectSendResult.SUCCESS;
+    }
+
+    private DirectSendResult sendDirectPage(long chatId, String text, InlineKeyboardMarkup keyboard) {
         SendMessage msg = new SendMessage();
         msg.setChatId(String.valueOf(chatId));
-        msg.setText(truncateIfNeeded(text));
+        msg.setText(text);
         msg.setParseMode("HTML");
         if (keyboard != null) {
             msg.setReplyMarkup(keyboard);
@@ -124,6 +180,8 @@ public class MessageSender {
                 return DirectSendResult.RATE_LIMIT;
             }
 
+            if (TelegramErrorClassifier.isNetworkError(e)) return DirectSendResult.ERROR;
+            if (e.getMessage() == null || !e.getMessage().toLowerCase().contains("parse entities")) return DirectSendResult.ERROR;
             // Try plain text fallback if HTML tags were unclosed/malformed
             try {
                 msg.setParseMode(null);
@@ -140,6 +198,29 @@ public class MessageSender {
                 log.warn("[DIRECT SEND ERROR] Failed for chatId {}: {}", chatId, ex2.getMessage());
                 return DirectSendResult.ERROR;
             }
+        }
+    }
+
+    public DirectSendResult sendDirectMedia(long chatId, BroadcastMedia media) {
+        try {
+            var file = new org.telegram.telegrambots.meta.api.objects.InputFile(media.fileId());
+            String chat = Long.toString(chatId);
+            switch (media.type()) {
+                case PHOTO -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendPhoto.builder()
+                        .chatId(chat).photo(file).caption(media.caption()).captionEntities(media.entities()).build());
+                case VIDEO -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendVideo.builder()
+                        .chatId(chat).video(file).caption(media.caption()).captionEntities(media.entities()).supportsStreaming(true).build());
+                case ANIMATION -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendAnimation.builder()
+                        .chatId(chat).animation(file).caption(media.caption()).captionEntities(media.entities()).build());
+                case DOCUMENT -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendDocument.builder()
+                        .chatId(chat).document(file).caption(media.caption()).captionEntities(media.entities()).build());
+            }
+            return DirectSendResult.SUCCESS;
+        } catch (Exception e) {
+            if (TelegramErrorClassifier.isUserBlockedError(e)) return DirectSendResult.BLOCKED;
+            if (TelegramErrorClassifier.isRateLimitError(e)) return DirectSendResult.RATE_LIMIT;
+            log.warn("Не удалось отправить медиа в чат {}: {}", chatId, e.getMessage());
+            return DirectSendResult.ERROR;
         }
     }
 
@@ -206,17 +287,4 @@ public class MessageSender {
         }
     }
 
-    /**
-     * Truncate text to fit Telegram's 4096-char limit, trying to break at paragraph boundaries.
-     */
-    private String truncateIfNeeded(String text) {
-        if (text.length() <= 3900) return text;
-
-        int cut = text.lastIndexOf("\n\n", 3900);
-        if (cut > 2000) {
-            return text.substring(0, cut) + "\n\n<i>...часть расписания сокращена</i>";
-        } else {
-            return text.substring(0, 3900) + "...";
-        }
-    }
 }

@@ -17,6 +17,9 @@ public class CallbackRouter {
 
     private static final Logger log = LoggerFactory.getLogger(CallbackRouter.class);
 
+    private final java.util.Set<Long> preserveChangesOnTime = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Map<Long, Long> pendingTime = new java.util.concurrent.ConcurrentHashMap<>();
+    private final dev.ix1ax.main.service.UserActivityService activity;
     private final ScheduleService scheduleService;
     private final MessageSender messageSender;
     private final dev.ix1ax.main.service.AdminService adminService;
@@ -24,6 +27,13 @@ public class CallbackRouter {
     public CallbackRouter(ScheduleService scheduleService,
                           MessageSender messageSender,
                           dev.ix1ax.main.service.AdminService adminService) {
+        this(scheduleService, messageSender, adminService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CallbackRouter(ScheduleService scheduleService, MessageSender messageSender,
+                          dev.ix1ax.main.service.AdminService adminService, dev.ix1ax.main.service.UserActivityService activity) {
+        this.activity = activity;
         this.scheduleService = scheduleService;
         this.messageSender = messageSender;
         this.adminService = adminService;
@@ -33,12 +43,44 @@ public class CallbackRouter {
      * Route a callback query to the appropriate handler.
      */
     public void route(CallbackQuery callback) {
+        if (callback.getMessage() == null || callback.getData() == null || callback.getFrom() == null) return;
         String data = callback.getData();
         long chatId = callback.getMessage().getChatId();
         int messageId = callback.getMessage().getMessageId();
 
+        if (callback.getFrom().getId() != chatId) return;
         UserSettings user = scheduleService.getOrCreateUser(chatId);
+        if (activity != null) activity.record(chatId);
+        // Старое сообщение не должно откатывать текущий профиль и настройки.
+        if (user.getMessageId() != null && user.getMessageId() != messageId && !data.startsWith("admin:")) return;
         user.setMessageId(messageId);
+        pendingTime.remove(chatId);
+        if (!data.startsWith("notify:time:") && !data.equals("notify:custom_time")) preserveChangesOnTime.remove(chatId);
+        if (data.equals("help")) {
+            messageSender.editMessage(chatId, messageId, HelpText.forUser(adminService.isAdmin(chatId)), KeyboardFactory.buildScheduleKeyboard());
+            return;
+        }
+        if (data.startsWith("page:")) { messageSender.showPage(chatId, messageId, data); return; }
+        if (data.startsWith("teacherid:")) {
+            String wanted = data.substring(10);
+            String selected = scheduleService.getTeacherFirstLetters().stream().flatMap(letter -> scheduleService.getTeachersByLetter(letter).stream())
+                    .filter(name -> java.util.UUID.nameUUIDFromBytes(name.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().equals(wanted)).findFirst().orElse(null);
+            if (selected == null) return;
+            data = "teacher:" + selected;
+        }
+        if (data.equals("dashboard") || data.startsWith("view:")) {
+            boolean teacher = "teacher".equals(user.getRole());
+            String name = teacher ? user.getTeacherName() : user.getGroupName();
+            if (name == null || name.isBlank()) { showMainMenu(chatId, messageId); return; }
+            switch (data) {
+                case "view:today" -> showScheduleDay(chatId, messageId, name, scheduleService.getTodayName(), teacher, false);
+                case "view:tomorrow" -> showScheduleDay(chatId, messageId, name, scheduleService.getTomorrowName(), teacher, true);
+                case "view:week" -> showWeekSchedule(chatId, messageId, name, teacher);
+                case "view:changes" -> showChanges(chatId, messageId, name, teacher);
+                default -> { if (teacher) showTeacherActions(chatId, messageId, name); else showStudentActions(chatId, messageId, name); }
+            }
+            return;
+        }
 
         String sender = callback.getFrom() != null
                 ? (callback.getFrom().getUserName() != null
@@ -46,7 +88,7 @@ public class CallbackRouter {
                     : callback.getFrom().getFirstName())
                 : "id:" + chatId;
 
-        log.info("[USER CLICK] ChatId: {} ({}) clicked: '{}'", chatId, sender, data);
+        log.debug("[USER CLICK] ChatId: {} ({}) clicked: '{}'", chatId, sender, data);
 
         // ===== Admin flow =====
         if (data.startsWith("admin:")) {
@@ -72,11 +114,14 @@ public class CallbackRouter {
             showCourseSelection(chatId, messageId);
         } else if (data.startsWith("course:")) {
             String courseName = data.substring("course:".length());
+            if (!scheduleService.getCourseNames().contains(courseName)) return;
             user.setCourse(Integer.parseInt(courseName.replaceAll("\\D", "")));
             scheduleService.saveUser(user);
             showGroupSelection(chatId, messageId, courseName);
         } else if (data.startsWith("group:")) {
             String groupName = data.substring("group:".length());
+            if (scheduleService.getCourseNames().stream().noneMatch(course -> scheduleService.getGroupsForCourse(course).contains(groupName))) return;
+            user.setRole("student");
             user.setGroupName(groupName);
             scheduleService.saveUser(user);
             showStudentActions(chatId, messageId, groupName);
@@ -100,6 +145,8 @@ public class CallbackRouter {
             showTeachersByLetter(chatId, messageId, data.substring("tletter:".length()));
         } else if (data.startsWith("teacher:")) {
             String teacherName = data.substring("teacher:".length());
+            if (scheduleService.getTeacherFirstLetters().stream().noneMatch(letter -> scheduleService.getTeachersByLetter(letter).contains(teacherName))) return;
+            user.setRole("teacher");
             user.setTeacherName(teacherName);
             scheduleService.saveUser(user);
             showTeacherActions(chatId, messageId, teacherName);
@@ -117,7 +164,16 @@ public class CallbackRouter {
         // ===== Notification flow =====
         } else if (data.equals("notify:settings")) {
             showNotifySettings(chatId, messageId, user);
+        } else if (data.equals("notify:tomorrow")) {
+            boolean configured = "student".equals(user.getRole()) ? user.getGroupName() != null && !user.getGroupName().isBlank()
+                    : "teacher".equals(user.getRole()) && user.getTeacherName() != null && !user.getTeacherName().isBlank();
+            if (!configured) { showMainMenu(chatId, messageId); return; }
+            user.setNotifyTomorrow(!Boolean.TRUE.equals(user.getNotifyTomorrow()));
+            if (user.getNotifyTime() == null) user.setNotifyTime("18:00");
+            scheduleService.saveUser(user);
+            showNotifySettings(chatId, messageId, user);
         } else if (data.equals("notify:enable") || data.equals("notify:change_time")) {
+            if (data.equals("notify:change_time")) preserveChangesOnTime.add(chatId);
             showTimePicker(chatId, messageId, user);
         } else if (data.equals("notify:disable")) {
             disableNotifications(chatId, messageId, user);
@@ -164,15 +220,11 @@ public class CallbackRouter {
     // ===== Screen renderers =====
 
     private void showMainMenu(long chatId, int messageId) {
-        String text = "🏛 <b>Коняево — Расписание</b>\n\n" +
-                "Тверской колледж им. А.Н. Коняева\n" +
-                "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
-                "Выберите, кто Вы:";
-        messageSender.editMessage(chatId, messageId, text, KeyboardFactory.buildRoleKeyboard());
+        messageSender.editMessage(chatId, messageId, getMainMenuText(), KeyboardFactory.buildRoleKeyboard());
     }
 
     private void showCourseSelection(long chatId, int messageId) {
-        String text = "🎓 <b>Выберите курс:</b>";
+        String text = "📚 <b>Выберите курс:</b>";
         messageSender.editMessage(chatId, messageId, text,
                 KeyboardFactory.buildCourseKeyboard(scheduleService.getCourseNames()));
     }
@@ -184,16 +236,12 @@ public class CallbackRouter {
     }
 
     private void showStudentActions(long chatId, int messageId, String groupName) {
-        String text = "🏛 <b>Коняево — Расписание</b>\n\n" +
-                "👥 <b>Группа: " + groupName + "</b>\n" +
-                "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
-                "Выберите действие:";
-        messageSender.editMessage(chatId, messageId, text,
+        messageSender.editMessage(chatId, messageId, getStudentActionText(groupName),
                 KeyboardFactory.buildStudentActionsKeyboard(groupName));
     }
 
     private void showTeacherLetters(long chatId, int messageId) {
-        String text = "👨‍🏫 <b>Выберите первую букву фамилии:</b>";
+        String text = "🔤 <b>Выберите первую букву фамилии:</b>";
         messageSender.editMessage(chatId, messageId, text,
                 KeyboardFactory.buildTeacherLettersKeyboard(scheduleService.getTeacherFirstLetters()));
     }
@@ -205,11 +253,7 @@ public class CallbackRouter {
     }
 
     private void showTeacherActions(long chatId, int messageId, String teacherName) {
-        String text = "🏛 <b>Коняево — Расписание</b>\n\n" +
-                "👨‍🏫 <b>" + teacherName + "</b>\n" +
-                "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
-                "Выберите действие:";
-        messageSender.editMessage(chatId, messageId, text,
+        messageSender.editMessage(chatId, messageId, getTeacherActionText(teacherName),
                 KeyboardFactory.buildTeacherActionsKeyboard(teacherName));
     }
 
@@ -225,9 +269,9 @@ public class CallbackRouter {
     private void showScheduleDay(long chatId, int messageId, String name, String dayName, boolean isTeacher, boolean isTomorrow) {
         String text;
         if (dayName.isEmpty()) {
-            String icon = isTeacher ? "👨‍🏫" : "👥";
+            String icon = isTeacher ? "" : "";
             String holidayText = isTomorrow ? "Завтра выходной день!" : "Сегодня выходной день!";
-            text = icon + " <b>" + name + "</b>\n\n✨ <i>" + holidayText + "</i>";
+            text = icon + " <b>" + name + "</b>\n\n<i>" + holidayText + "</i>";
         } else {
             text = isTeacher
                     ? scheduleService.getScheduleTextForTeacher(name, dayName)
@@ -236,7 +280,7 @@ public class CallbackRouter {
 
         String backCallback = isTeacher ? "back:tactions:" + name : "back:sactions:" + name;
         messageSender.editMessage(chatId, messageId, text,
-                KeyboardFactory.buildBackKeyboard("‹ Назад в меню", backCallback));
+                KeyboardFactory.buildScheduleKeyboard());
     }
 
     private void showWeekSchedule(long chatId, int messageId, String name, boolean isTeacher) {
@@ -246,7 +290,7 @@ public class CallbackRouter {
 
         String backCallback = isTeacher ? "back:tactions:" + name : "back:sactions:" + name;
         messageSender.editMessage(chatId, messageId, text,
-                KeyboardFactory.buildBackKeyboard("‹ Назад в меню", backCallback));
+                KeyboardFactory.buildScheduleKeyboard());
     }
 
     private void showChanges(long chatId, int messageId, String name, boolean isTeacher) {
@@ -256,7 +300,7 @@ public class CallbackRouter {
 
         String backCallback = isTeacher ? "back:tactions:" + name : "back:sactions:" + name;
         messageSender.editMessage(chatId, messageId, text,
-                KeyboardFactory.buildBackKeyboard("‹ Назад в меню", backCallback));
+                KeyboardFactory.buildScheduleKeyboard());
     }
 
     // ===== Public helpers for auto-login from KonyaevoBot =====
@@ -273,14 +317,14 @@ public class CallbackRouter {
 
     public String getStudentActionText(String groupName) {
         return "🏛 <b>Коняево — Расписание</b>\n\n" +
-                "👥 <b>Группа: " + groupName + "</b>\n" +
+                "👥 <b>Группа: " + dev.ix1ax.main.util.HtmlUtils.escapeHtml(groupName) + "</b>\n" +
                 "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
                 "Выберите действие:";
     }
 
     public String getTeacherActionText(String teacherName) {
         return "🏛 <b>Коняево — Расписание</b>\n\n" +
-                "👨‍🏫 <b>" + teacherName + "</b>\n" +
+                "👤 <b>" + dev.ix1ax.main.util.HtmlUtils.escapeHtml(teacherName) + "</b>\n" +
                 "🗓 Текущая: <b>" + scheduleService.getCurrentWeekBadge() + "</b>\n\n" +
                 "Выберите действие:";
     }
@@ -289,10 +333,10 @@ public class CallbackRouter {
 
     private String getBackCallback(UserSettings user) {
         if ("teacher".equals(user.getRole()) && user.getTeacherName() != null) {
-            return "back:tactions:" + user.getTeacherName();
+            return "dashboard";
         }
         if ("student".equals(user.getRole()) && user.getGroupName() != null) {
-            return "back:sactions:" + user.getGroupName();
+            return "dashboard";
         }
         return "main";
     }
@@ -306,7 +350,7 @@ public class CallbackRouter {
         sb.append("🔔 <b>Уведомления об изменениях</b>\n\n");
 
         if (enabled && time != null) {
-            sb.append("Статус: ✅ <b>Включены</b>\n");
+            sb.append("Статус: <b>Включены ✅</b>\n");
             sb.append("⏰ Время отправки: <b>").append(time).append(" (МСК)</b>\n");
             sb.append("📅 Дни недели: <b>").append(user.getNotifyDaysSummary()).append("</b>\n\n");
             sb.append("В выбранные дни в указанное время бот отправит\n");
@@ -317,7 +361,7 @@ public class CallbackRouter {
                 sb.append("Вашей группы.");
             }
         } else {
-            sb.append("Статус: ❌ <b>Выключены</b>\n");
+            sb.append("Статус: <b>Выключены 🔕</b>\n");
             sb.append("📅 Дни недели: <b>").append(user.getNotifyDaysSummary()).append("</b>\n\n");
             sb.append("Включите, чтобы получать\n");
             sb.append("свежие замены для ");
@@ -328,14 +372,16 @@ public class CallbackRouter {
             }
         }
 
+        sb.append("\n\nРасписание на завтра: <b>").append(Boolean.TRUE.equals(user.getNotifyTomorrow()) ? "Включено" : "Выключено").append("</b>");
+        if (Boolean.TRUE.equals(user.getNotifyTomorrow())) sb.append("\n").append(user.getNotifyTime()).append(" (МСК) · ").append(user.getNotifyDaysSummary());
         messageSender.editMessage(chatId, messageId, sb.toString(),
-                KeyboardFactory.buildNotifySettingsKeyboard(enabled, backCallback));
+                KeyboardFactory.buildNotifySettingsKeyboard(enabled, Boolean.TRUE.equals(user.getNotifyTomorrow()), backCallback));
     }
 
     private void showNotifyDays(long chatId, int messageId, UserSettings user) {
         String text = "📅 <b>Дни отправки уведомлений</b>\n\n" +
                 "Текущие дни: <b>" + user.getNotifyDaysSummary() + "</b>\n\n" +
-                "Нажмите на день недели, чтобы включить (✅) или выключить (❌) его:";
+                "Нажмите на день недели, чтобы изменить его состояние:";
         messageSender.editMessage(chatId, messageId, text,
                 KeyboardFactory.buildNotifyDaysKeyboard(user.getNotifyDaysSet(), "notify:settings"));
     }
@@ -348,16 +394,13 @@ public class CallbackRouter {
     }
 
     private void enableNotifications(long chatId, int messageId, UserSettings user, String time) {
-        user.setNotifyEnabled(true);
+        if (!time.matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]")) return;
+        if (!("student".equals(user.getRole()) && user.getGroupName() != null) && !("teacher".equals(user.getRole()) && user.getTeacherName() != null)) return;
+        if (!preserveChangesOnTime.remove(chatId)) user.setNotifyEnabled(true);
         user.setNotifyTime(time);
         scheduleService.saveUser(user);
 
-        String text = "✅ <b>Уведомления включены!</b>\n\n" +
-                "⏰ Каждый день в <b>" + time + " (МСК)</b> Вы будете\n" +
-                "получать свежие замены пар.";
-        String backCallback = getBackCallback(user);
-        messageSender.editMessage(chatId, messageId, text,
-                KeyboardFactory.buildNotifySettingsKeyboard(true, backCallback));
+        showNotifySettings(chatId, messageId, user);
     }
 
     private void disableNotifications(long chatId, int messageId, UserSettings user) {
@@ -369,36 +412,47 @@ public class CallbackRouter {
                 "Включить обратно можно в любой момент.";
         String backCallback = getBackCallback(user);
         messageSender.editMessage(chatId, messageId, text,
-                KeyboardFactory.buildNotifySettingsKeyboard(false, backCallback));
+                KeyboardFactory.buildNotifySettingsKeyboard(false, Boolean.TRUE.equals(user.getNotifyTomorrow()), backCallback));
     }
 
     private void promptCustomTime(long chatId, int messageId, UserSettings user) {
-        String text = "⌨️ <b>Введите время в формате ЧЧ:ММ</b>\n\n" +
+        pendingTime.put(chatId, System.currentTimeMillis());
+        String text = "✏️ <b>Введите время в формате ЧЧ:ММ</b>\n\n" +
                 "Например: <code>07:30</code> или <code>17:53</code>\n\n" +
                 "Отправьте время сообщением в чат.";
         messageSender.editMessage(chatId, messageId, text,
-                KeyboardFactory.buildBackKeyboard("‹ Назад", "notify:settings"));
+                KeyboardFactory.buildBackKeyboard("◀️ Назад", "notify:settings"));
     }
 
     /**
      * Called from KonyaevoBot when user types a time like "07:30".
      * Returns true if time was valid and saved, false otherwise.
      */
+    public void recordActivity(long chatId) { if (activity != null) activity.record(chatId); }
+
+    public void cancelInput(long chatId) { pendingTime.remove(chatId); preserveChangesOnTime.remove(chatId); }
+
+    private boolean invalidTime(long chatId) {
+        UserSettings user = scheduleService.getOrCreateUser(chatId);
+        String text = "Введите время от <b>00:00</b> до <b>23:59</b> по Москве. Например: <code>07:30</code>.";
+        if (user.getMessageId() != null) messageSender.editMessage(chatId, user.getMessageId(), text,
+                KeyboardFactory.buildBackKeyboard("Назад", "notify:settings"));
+        return true;
+    }
+
     public boolean handleCustomTimeInput(long chatId, String text) {
+        Long started = pendingTime.get(chatId);
+        if (started == null || System.currentTimeMillis() - started > 300000) { pendingTime.remove(chatId); return false; }
         String trimmed = text.trim();
 
         // Validate HH:MM format
-        if (!trimmed.matches("^\\d{1,2}:\\d{2}$")) {
-            return false;
-        }
+        if (!trimmed.matches("^\\d{1,2}:\\d{2}$")) return invalidTime(chatId);
 
         String[] parts = trimmed.split(":");
         int hour = Integer.parseInt(parts[0]);
         int minute = Integer.parseInt(parts[1]);
 
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return false;
-        }
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return invalidTime(chatId);
 
         // Normalize to HH:mm
         String normalizedTime = String.format("%02d:%02d", hour, minute);
@@ -408,17 +462,18 @@ public class CallbackRouter {
             return false; // User hasn't completed setup
         }
 
-        user.setNotifyEnabled(true);
+        if (!preserveChangesOnTime.remove(chatId)) user.setNotifyEnabled(true);
         user.setNotifyTime(normalizedTime);
+        pendingTime.remove(chatId);
         scheduleService.saveUser(user);
 
-        String resultText = "✅ <b>Уведомления включены!</b>\n\n" +
-                "⏰ Каждый день в <b>" + normalizedTime + " (МСК)</b> Вы будете\n" +
+        String resultText = "<b>Время уведомлений сохранено</b>\n\n" +
+                "В выбранные дни в <b>" + normalizedTime + " (МСК)</b> Вы будете\n" +
                 "получать свежие замены пар.";
         String backCallback = getBackCallback(user);
 
         messageSender.sendNewMessage(chatId, resultText,
-                KeyboardFactory.buildNotifySettingsKeyboard(true, backCallback),
+                KeyboardFactory.buildNotifySettingsKeyboard(Boolean.TRUE.equals(user.getNotifyEnabled()), Boolean.TRUE.equals(user.getNotifyTomorrow()), backCallback),
                 "custom notify time confirmation");
 
         return true;
@@ -437,22 +492,29 @@ public class CallbackRouter {
             showBroadcastInfo(chatId, messageId);
         } else if (data.startsWith("admin:bc_send:")) {
             String draftId = data.substring("admin:bc_send:".length());
+            var draft = adminService.getDraft(draftId);
+            if (draft == null || draft.adminChatId() != chatId) {
+                messageSender.editMessage(chatId, messageId, "Предпросмотр устарел. Создайте новую рассылку через /broadcast.", KeyboardFactory.buildAdminBackKeyboard());
+                return;
+            }
             adminService.startBroadcast(draftId, messageId);
         } else if (data.startsWith("admin:bc_cancel:")) {
             String draftId = data.substring("admin:bc_cancel:".length());
+            var draft = adminService.getDraft(draftId);
+            if (draft == null || draft.adminChatId() != chatId) return;
             adminService.removeDraft(draftId);
             messageSender.editMessage(chatId, messageId,
-                    "❌ <i>Рассылка отменена.</i>",
+                    "<i>Рассылка отменена.</i>",
                     KeyboardFactory.buildAdminBackKeyboard());
         } else if (data.equals("admin:close")) {
             messageSender.editMessage(chatId, messageId,
-                    "🚪 <i>Панель администратора закрыта. Чтобы открыть её снова, отправьте команду /admin.</i>",
+                    "<i>Панель администратора закрыта. Чтобы открыть её снова, отправьте команду /admin.</i>",
                     null);
         }
     }
 
     public void showAdminMenu(long chatId, int messageId) {
-        String text = "👑 <b>Панель администратора</b>\n\n" +
+        String text = "<b>Панель администратора</b>\n\n" +
                 "Управление ботом Коняево:\n" +
                 "• Просмотр статистики и активности\n" +
                 "• Ручное обновление кэша расписания\n" +
@@ -461,7 +523,7 @@ public class CallbackRouter {
     }
 
     public void sendAdminMenu(long chatId) {
-        String text = "👑 <b>Панель администратора</b>\n\n" +
+        String text = "<b>Панель администратора</b>\n\n" +
                 "Управление ботом Коняево:\n" +
                 "• Просмотр статистики и активности\n" +
                 "• Ручное обновление кэша расписания\n" +
@@ -482,13 +544,13 @@ public class CallbackRouter {
     private void handleAdminRefresh(long chatId, int messageId) {
         try {
             adminService.refreshCache();
-            String text = "🔄 <b>Кэш успешно обновлён!</b>\n\n" +
-                    "📅 Расписание и замены повторно загружены из Google Таблиц.";
+            String text = "<b>Кэш успешно обновлён!</b>\n\n" +
+                    "Расписание и замены повторно загружены из Google Таблиц.";
             messageSender.editMessage(chatId, messageId, text, KeyboardFactory.buildAdminBackKeyboard());
         } catch (Exception e) {
             log.error("[ADMIN REFRESH ERROR]", e);
             messageSender.editMessage(chatId, messageId,
-                    "⚠️ <b>Ошибка обновления кэша:</b> " + e.getMessage(),
+                    "<b>Ошибка обновления кэша:</b> " + e.getMessage(),
                     KeyboardFactory.buildAdminBackKeyboard());
         }
     }
@@ -496,20 +558,20 @@ public class CallbackRouter {
     public void sendAdminRefresh(long chatId) {
         try {
             adminService.refreshCache();
-            String text = "🔄 <b>Кэш успешно обновлён!</b>\n\n" +
-                    "📅 Расписание и замены повторно загружены из Google Таблиц.";
+            String text = "<b>Кэш успешно обновлён!</b>\n\n" +
+                    "Расписание и замены повторно загружены из Google Таблиц.";
             messageSender.sendDirectMessage(chatId, text, KeyboardFactory.buildAdminBackKeyboard());
         } catch (Exception e) {
             log.error("[ADMIN REFRESH ERROR]", e);
             messageSender.sendDirectMessage(chatId,
-                    "⚠️ <b>Ошибка обновления кэша:</b> " + e.getMessage(),
+                    "<b>Ошибка обновления кэша:</b> " + e.getMessage(),
                     KeyboardFactory.buildAdminBackKeyboard());
         }
     }
 
     private void showBroadcastInfo(long chatId, int messageId) {
-        String text = "📢 <b>Рассылка сообщений</b>\n\n" +
-                "Для запуска рассылки отправьте команду в чат:\n" +
+        String text = "<b>Рассылка сообщений</b>\n\n" +
+                "Для текста: /broadcast текст. Для видео, фото или файла: /broadcast, затем прикрепите медиа с подписью. Можно также ответить командой /broadcast на готовое сообщение.\n" +
                 "<code>/broadcast [текст сообщения]</code>\n\n" +
                 "<i>Поддерживается форматирование Telegram HTML (b, i, code, a). Перед фактической отправкой бот покажет предпросмотр и кнопки подтверждения.</i>";
         messageSender.editMessage(chatId, messageId, text, KeyboardFactory.buildAdminBackKeyboard());

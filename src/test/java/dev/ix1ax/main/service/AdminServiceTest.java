@@ -73,11 +73,12 @@ public class AdminServiceTest {
     public void testAdminKeyboards() {
         var adminKb = KeyboardFactory.buildAdminKeyboard();
         assertNotNull(adminKb);
-        assertEquals(3, adminKb.getKeyboard().size());
+        assertEquals(4, adminKb.getKeyboard().size());
         assertEquals("admin:stats", adminKb.getKeyboard().get(0).get(0).getCallbackData());
         assertEquals("admin:refresh", adminKb.getKeyboard().get(0).get(1).getCallbackData());
         assertEquals("admin:broadcast_info", adminKb.getKeyboard().get(1).get(0).getCallbackData());
-        assertEquals("admin:close", adminKb.getKeyboard().get(2).get(0).getCallbackData());
+        assertEquals("help", adminKb.getKeyboard().get(2).get(0).getCallbackData());
+        assertEquals("admin:close", adminKb.getKeyboard().get(3).get(0).getCallbackData());
 
         var confirmKb = KeyboardFactory.buildBroadcastConfirmKeyboard("draft123");
         assertNotNull(confirmKb);
@@ -99,8 +100,9 @@ public class AdminServiceTest {
         @Override public long countByCourse(Integer course) { return 0; }
         @Override public List<Long> findAllChatIds() { return List.of(1669683599L); }
         @Override public List<Object[]> findTopGroups(Pageable pageable) { return Collections.emptyList(); }
+        @Override public List<UserSettings> findByNotifyTomorrowTrueAndNotifyTime(String time) { return List.of(); }
         @Override public List<UserSettings> findByNotifyEnabledTrueAndNotifyTime(String time) { return Collections.emptyList(); }
-        @Override public long countByNotifyEnabledTrue() { return 0; }
+        @Override public long countWithNotifications() { return 0; }
 
         @Override public void flush() {}
         @Override public <S extends UserSettings> S saveAndFlush(S entity) { return entity; }

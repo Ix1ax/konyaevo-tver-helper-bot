@@ -1,14 +1,17 @@
 package dev.ix1ax.main.service;
 
 import org.springframework.stereotype.Service;
+import dev.ix1ax.main.dto.DayScheduleDto;
+import dev.ix1ax.main.dto.LessonDto;
 import dev.ix1ax.main.model.DaySchedule;
+import dev.ix1ax.main.model.Lesson;
 import dev.ix1ax.main.model.UserSettings;
 import dev.ix1ax.main.repository.UserSettingsRepository;
+import dev.ix1ax.main.util.HtmlUtils;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -20,6 +23,7 @@ public class ScheduleService {
 
     private static final ZoneId MOSCOW = ZoneId.of("Europe/Moscow");
 
+    private final ScheduleResolver resolver;
     private final ScheduleParserService scheduleParser;
     private final ChangesParserService changesParser;
     private final UserSettingsRepository userSettingsRepo;
@@ -37,6 +41,7 @@ public class ScheduleService {
     public ScheduleService(ScheduleParserService scheduleParser,
                            ChangesParserService changesParser,
                            UserSettingsRepository userSettingsRepo) {
+        this.resolver = new ScheduleResolver(scheduleParser, changesParser);
         this.scheduleParser = scheduleParser;
         this.changesParser = changesParser;
         this.userSettingsRepo = userSettingsRepo;
@@ -70,21 +75,12 @@ public class ScheduleService {
      * Uses Moscow timezone to ensure correct date on any server.
      */
     public String getCurrentWeekBadge() {
-        LocalDate now = LocalDate.now(MOSCOW);
-        int year = now.getYear();
-        LocalDate semesterStart;
-        if (now.getMonthValue() >= 9) {
-            semesterStart = LocalDate.of(year, 9, 1);
-        } else if (now.getMonthValue() <= 1) {
-            semesterStart = LocalDate.of(year - 1, 9, 1);
-        } else {
-            semesterStart = LocalDate.of(year, 2, 1);
-        }
-        LocalDate startMonday = semesterStart.with(DayOfWeek.MONDAY);
-        long daysBetween = ChronoUnit.DAYS.between(startMonday, now);
-        long weekNumber = (daysBetween / 7) + 1;
-        boolean isRed = (weekNumber % 2 != 0);
-        return isRed ? "🔴 Красная неделя" : "🔵 Синяя неделя";
+        return AcademicWeek.typeFor(LocalDate.now(MOSCOW)).equals(Lesson.WEEK_RED)
+                ? "🔴 Красная неделя" : "🔵 Синяя неделя";
+    }
+
+    public boolean isTomorrowRedWeek() {
+        return AcademicWeek.typeFor(LocalDate.now(MOSCOW).plusDays(1)).equals(Lesson.WEEK_RED);
     }
 
     // ===== Schedule for Students =====
@@ -130,41 +126,89 @@ public class ScheduleService {
         return DAY_NAMES.getOrDefault(dow, "");
     }
 
-    public String getScheduleTextForGroup(String groupName, String dayName) {
-        DaySchedule schedule = scheduleParser.getScheduleForGroupAndDay(groupName, dayName);
-        String weekInfo = getCurrentWeekBadge();
-        if (schedule == null || !schedule.hasLessons()) {
-            return "👥 <b>Группа: " + groupName + "</b>\n" +
-                    "📅 <b>" + dayName + "</b> (" + weekInfo + ")\n\n" +
-                    "✨ <i>Пар нет — свободный день</i>";
-        }
+    public Map<String, DayScheduleDto> getResolvedGroupSchedule(String groupName) {
+        return resolver.getScheduleForGroup(groupName);
+    }
 
-        String formatted = schedule.format();
-        int idx = formatted.indexOf("\n\n");
-        String lessonsOnly = (idx != -1) ? formatted.substring(idx + 2) : formatted;
-        return "👥 <b>Группа: " + groupName + "</b>\n" +
-                "📅 <b>" + dayName + "</b> (" + weekInfo + ")\n\n" +
-                lessonsOnly;
+    public Map<String, DayScheduleDto> getResolvedTeacherSchedule(String teacherName) {
+        return resolver.getScheduleForTeacher(teacherName);
+    }
+
+    public Map<String, DayScheduleDto> getBaseGroupSchedule(String groupName) {
+        return resolver.getScheduleForGroup(groupName, false);
+    }
+
+    public Map<String, DayScheduleDto> getBaseTeacherSchedule(String teacherName) {
+        return resolver.getScheduleForTeacher(teacherName, false);
+    }
+
+    public String getScheduleTextForGroup(String groupName, String dayName) {
+        return formatResolvedDay(groupName, dayName, false, getResolvedGroupSchedule(groupName).get(dayName));
+    }
+
+    private String formatResolvedDay(String target, String dayName, boolean forTeacher, DayScheduleDto day) {
+        LocalDate date = LocalDate.now(MOSCOW);
+        if (dayName.equals(getTomorrowName())) date = date.plusDays(1);
+        return formatResolvedDay(target, dayName, forTeacher, day, AcademicWeek.typeFor(date));
+    }
+
+    private String formatResolvedDay(String target, String dayName, boolean forTeacher, DayScheduleDto day, String weekType) {
+        return formatResolvedDay(target, dayName, forTeacher, day, weekType, true);
+    }
+
+    private String formatResolvedDay(String target, String dayName, boolean forTeacher, DayScheduleDto day, String weekType, boolean includeTarget) {
+        String weekBadge = weekType.equals(Lesson.WEEK_RED) ? "🔴 Красная неделя" : "🔵 Синяя неделя";
+        StringBuilder text = new StringBuilder();
+        if (includeTarget) {
+            text.append(forTeacher ? "👨‍🏫 <b>" : "👥 <b>Группа: ")
+                    .append(HtmlUtils.escapeHtml(target)).append("</b>\n📅 <b>")
+                    .append(HtmlUtils.escapeHtml(dayName)).append("</b> (").append(weekBadge).append(")\n\n");
+        } else {
+            text.append("<b>").append(HtmlUtils.escapeHtml(dayName)).append("</b>\n\n");
+        }
+        if (day == null || !day.isHasLessons()) {
+            return text.append("✨ <i>Пар нет — свободный день</i>").toString();
+        }
+        List<String> blocks = new ArrayList<>();
+        for (LessonDto item : day.getLessons()) {
+            if (item.getWeekType() != null && !item.getWeekType().equals(weekType)) continue;
+            Lesson original = new Lesson(item.getLessonNumber(), item.getTime(),
+                    item.getOriginalSubject() != null ? item.getOriginalSubject() : item.getSubject(),
+                    item.getOriginalTeacher() != null ? item.getOriginalTeacher() : item.getTeacher(),
+                    item.getOriginalRoom() != null ? item.getOriginalRoom() : item.getRoom(), item.getWeekType());
+            String formatted = forTeacher ? original.formatForTeacher(item.getGroupName()) : original.format();
+            if (!item.isChanged()) {
+                blocks.add(formatted);
+                continue;
+            }
+            StringBuilder block = new StringBuilder();
+            if (item.isCanceled() && item.getOriginalSubject() != null) block.append("<s>").append(formatted).append("</s>\n");
+            if (item.isCanceled()) {
+                block.append("❌ <b>ОТМЕНА</b>");
+            } else {
+                block.append("⚡️ <b>ЗАМЕНА:</b>\n");
+                Lesson replacement = new Lesson(item.getLessonNumber(), item.getTime(), item.getSubject(),
+                        item.getTeacher(), item.getRoom());
+                block.append(forTeacher ? replacement.formatForTeacher(item.getGroupName()) : replacement.format());
+            }
+            blocks.add(block.toString());
+        }
+        return text.append(blocks.isEmpty() ? "✨ <i>Пар нет — свободный день</i>" : String.join("\n\n", blocks)).toString();
     }
 
     public String getWeekScheduleTextForGroup(String groupName) {
-        String weekInfo = getCurrentWeekBadge();
-        StringBuilder sb = new StringBuilder();
-        sb.append("👥 <b>Группа: ").append(groupName).append("</b>\n");
-        sb.append("🗓 <b>Расписание на неделю</b> (текущая: ").append(weekInfo).append(")\n");
+        return formatWeek(groupName, false, getBaseGroupSchedule(groupName));
+    }
 
-        String[] days = scheduleParser.getDays();
-        for (String day : days) {
-            sb.append("\n──────────────────\n\n");
-            DaySchedule schedule = scheduleParser.getScheduleForGroupAndDay(groupName, day);
-            if (schedule == null || !schedule.hasLessons()) {
-                sb.append("<b>").append(day).append("</b>\n✨ <i>Пар нет — свободный день</i>");
-            } else {
-                sb.append(schedule.format());
-            }
+    private String formatWeek(String name, boolean teacher, Map<String, DayScheduleDto> days) {
+        String weekType = AcademicWeek.typeFor(LocalDate.now(MOSCOW));
+        StringBuilder text = new StringBuilder("<b>" + HtmlUtils.escapeHtml(name) + "</b>\nРасписание на неделю · " + getCurrentWeekBadge()
+                + "\n<i>Основное расписание без замен и отмен. Актуальные изменения — в «Сегодня», «Завтра» и «Замены».</i>");
+        for (String day : scheduleParser.getDays()) {
+            text.append("\n\n──────────────\n\n");
+            text.append(formatResolvedDay(name, day, teacher, days.get(day), weekType, false));
         }
-
-        return sb.toString();
+        return text.toString();
     }
 
     public String getChangesTextForGroup(String groupName) {
@@ -182,40 +226,11 @@ public class ScheduleService {
     }
 
     public String getScheduleTextForTeacher(String teacherName, String dayName) {
-        DaySchedule schedule = scheduleParser.getScheduleForTeacherAndDay(teacherName, dayName);
-        String weekInfo = getCurrentWeekBadge();
-        if (schedule == null || !schedule.hasLessons()) {
-            return "👨‍🏫 <b>" + teacherName + "</b>\n" +
-                    "📅 <b>" + dayName + "</b> (" + weekInfo + ")\n\n" +
-                    "✨ <i>Пар нет — свободный день</i>";
-        }
-
-        String formatted = schedule.formatForTeacher();
-        int idx = formatted.indexOf("\n\n");
-        String lessonsOnly = (idx != -1) ? formatted.substring(idx + 2) : formatted;
-        return "👨‍🏫 <b>" + teacherName + "</b>\n" +
-                "📅 <b>" + dayName + "</b> (" + weekInfo + ")\n\n" +
-                lessonsOnly;
+        return formatResolvedDay(teacherName, dayName, true, getResolvedTeacherSchedule(teacherName).get(dayName));
     }
 
     public String getWeekScheduleTextForTeacher(String teacherName) {
-        String weekInfo = getCurrentWeekBadge();
-        StringBuilder sb = new StringBuilder();
-        sb.append("👨‍🏫 <b>").append(teacherName).append("</b>\n");
-        sb.append("🗓 <b>Расписание на неделю</b> (текущая: ").append(weekInfo).append(")\n");
-
-        String[] days = scheduleParser.getDays();
-        for (String day : days) {
-            sb.append("\n──────────────────\n\n");
-            DaySchedule schedule = scheduleParser.getScheduleForTeacherAndDay(teacherName, day);
-            if (schedule == null || !schedule.hasLessons()) {
-                sb.append("<b>").append(day).append("</b>\n✨ <i>Пар нет — свободный день</i>");
-            } else {
-                sb.append(schedule.formatForTeacher());
-            }
-        }
-
-        return sb.toString();
+        return formatWeek(teacherName, true, getBaseTeacherSchedule(teacherName));
     }
 
     public String getChangesTextForTeacher(String teacherName) {

@@ -9,6 +9,8 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import dev.ix1ax.main.bot.KonyaevoBot;
 
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "bot.enabled", havingValue = "true", matchIfMissing = true)
 @Configuration
 public class BotConfig {
 

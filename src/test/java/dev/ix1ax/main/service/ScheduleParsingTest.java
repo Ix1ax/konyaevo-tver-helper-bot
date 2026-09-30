@@ -15,22 +15,22 @@ public class ScheduleParsingTest {
     public void testLessonFormatting() {
         Lesson regular = new Lesson(1, "8:30 - 10:05", "МДК 01.04", "Евстигнеев А.С.", "307");
         String formatted = regular.format();
-        assertTrue(formatted.contains("🔹 <b>1 пара</b> · <code>8:30 - 10:05</code>"));
-        assertTrue(formatted.contains("📖 <b>МДК 01.04</b>"));
-        assertTrue(formatted.contains("👨‍🏫 Евстигнеев А.С."));
-        assertTrue(formatted.contains("📍 Ауд. <b>307</b>"));
+        assertTrue(formatted.contains("<b>1 пара</b> · <code>8:30 - 10:05</code>"));
+        assertTrue(formatted.contains("<b>МДК 01.04</b>"));
+        assertTrue(formatted.contains("Евстигнеев А.С."));
+        assertTrue(formatted.contains("Ауд. <b>307</b>"));
 
         Lesson redLesson = new Lesson(2, "10:15 - 11:50", "МДК 01.02", "Комигачев К.А.", "310", Lesson.WEEK_RED);
         String redFormatted = redLesson.format();
-        assertTrue(redFormatted.contains("🔴 <b>2 пара</b> · <code>10:15 - 11:50</code> · <i>Красная неделя</i>"));
+        assertTrue(redFormatted.contains("<b>2 пара</b> · <code>10:15 - 11:50</code> · 🔴 <i>Красная неделя</i>"));
 
         Lesson blueLesson = new Lesson(2, "10:15 - 11:50", "МДК 02.01", "Петрушенко Л.Л.", "310", Lesson.WEEK_BLUE);
         String blueFormatted = blueLesson.format();
-        assertTrue(blueFormatted.contains("🔵 <b>2 пара</b> · <code>10:15 - 11:50</code> · <i>Синяя неделя</i>"));
+        assertTrue(blueFormatted.contains("<b>2 пара</b> · <code>10:15 - 11:50</code> · 🔵 <i>Синяя неделя</i>"));
 
         // Teacher format
         String teacherFormatted = regular.formatForTeacher("3-ИС4");
-        assertTrue(teacherFormatted.contains("👥 Группа: <b>3-ИС4</b>"));
+        assertTrue(teacherFormatted.contains("Группа: <b>3-ИС4</b>"));
     }
 
     @Test
@@ -131,7 +131,7 @@ public class ScheduleParsingTest {
     @Test
     public void testParseSheetWithPoiBidyloTuesday() throws Exception {
         java.io.File file = new java.io.File("src/test/resources/schedule.xlsx");
-        if (!file.exists()) return;
+        assertTrue(file.exists(), "Отсутствует тестовая книга расписания");
 
         ScheduleParserService parser = new ScheduleParserService();
         Map<String, Map<String, DaySchedule>> scheduleMap = new HashMap<>();
@@ -243,7 +243,7 @@ public class ScheduleParsingTest {
     @Test
     public void testComprehensiveScheduleIntegrity() throws Exception {
         java.io.File file = new java.io.File("src/test/resources/schedule.xlsx");
-        if (!file.exists()) return;
+        assertTrue(file.exists(), "Отсутствует тестовая книга расписания");
 
         ScheduleParserService parser = new ScheduleParserService();
         Map<String, Map<String, DaySchedule>> scheduleByGroup = new HashMap<>();
@@ -278,13 +278,13 @@ public class ScheduleParsingTest {
         for (var entry : scheduleByGroup.entrySet()) {
             String group = entry.getKey();
             StringBuilder weekSb = new StringBuilder();
-            weekSb.append("🏛 <b>Группа: ").append(group).append("</b>\n");
-            weekSb.append("🗓 <b>Расписание на неделю</b> (текущая: 🔴 Красная неделя)\n");
+            weekSb.append("<b>Группа: ").append(group).append("</b>\n");
+            weekSb.append("<b>Расписание на неделю</b> (текущая: Красная неделя)\n");
             for (String day : parser.getDays()) {
-                weekSb.append("\n──────────────────\n\n");
+                weekSb.append("\n\n\n");
                 DaySchedule ds = entry.getValue().get(day);
                 if (ds == null || !ds.hasLessons()) {
-                    weekSb.append("<b>").append(day).append("</b>\n✨ <i>Пар нет — свободный день</i>");
+                    weekSb.append("<b>").append(day).append("</b>\n<i>Пар нет — свободный день</i>");
                 } else {
                     weekSb.append(ds.format());
                     // Verify strictly sorted
@@ -308,13 +308,13 @@ public class ScheduleParsingTest {
         for (var entry : scheduleByTeacher.entrySet()) {
             String teacher = entry.getKey();
             StringBuilder weekSb = new StringBuilder();
-            weekSb.append("👨‍🏫 <b>").append(teacher).append("</b>\n");
-            weekSb.append("🗓 <b>Расписание на неделю</b> (текущая: 🔴 Красная неделя)\n");
+            weekSb.append("<b>").append(teacher).append("</b>\n");
+            weekSb.append("<b>Расписание на неделю</b> (текущая: Красная неделя)\n");
             for (String day : parser.getDays()) {
-                weekSb.append("\n──────────────────\n\n");
+                weekSb.append("\n\n\n");
                 DaySchedule ds = entry.getValue().get(day);
                 if (ds == null || !ds.hasLessons()) {
-                    weekSb.append("<b>").append(day).append("</b>\n✨ <i>Пар нет — свободный день</i>");
+                    weekSb.append("<b>").append(day).append("</b>\n<i>Пар нет — свободный день</i>");
                 } else {
                     weekSb.append(ds.formatForTeacher());
                     int prevNum = 0;
