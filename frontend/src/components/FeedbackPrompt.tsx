@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { signedRequest } from '../api/client';
 import { useTelegram } from '../hooks/useTelegram';
 
-export function FeedbackPrompt() {
+export function FeedbackPrompt({ enabled = true }: { enabled?: boolean }) {
   const { tg } = useTelegram();
   const [open, setOpen] = useState(false);
   const [stars, setStars] = useState(0);
@@ -13,7 +13,7 @@ export function FeedbackPrompt() {
   const [sent, setSent] = useState(false);
   const submitting = useRef(false);
   useEffect(() => {
-    if (!tg?.initData) return;
+    if (!enabled || !tg?.initData) return;
     let active = true;
     let timer: ReturnType<typeof setInterval> | undefined;
     let elapsed = 0;
@@ -33,7 +33,7 @@ export function FeedbackPrompt() {
       }, 1000);
     }).catch(() => { /* Ошибка проверки не должна мешать пользоваться расписанием. */ });
     return () => { active = false; clearInterval(timer); document.removeEventListener('visibilitychange', trackVisibility); };
-  }, [tg]);
+  }, [tg, enabled]);
   async function submit(value: number) {
     if (submitting.current || sent || value < 1 || value > 5 || value < 5 && comment.trim().length < 3) return;
     submitting.current = true;
@@ -48,7 +48,7 @@ export function FeedbackPrompt() {
     }
     finally { submitting.current = false; setSaving(false); }
   }
-  if (!open) return null;
+  if (!enabled || !open) return null;
   return <section role="dialog" aria-modal="false" className="surface feedback-popup feedback-compact" aria-labelledby="feedback-title" aria-busy={saving}>
     <button className="feedback-close" aria-label="Закрыть оценку" disabled={saving} onClick={() => setOpen(false)}><X size={16} /></button>
     <h2 id="feedback-title" className="feedback-heading">{sent ? 'Спасибо за оценку!' : 'Как Вам приложение?'}</h2>

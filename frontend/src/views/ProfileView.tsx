@@ -4,7 +4,6 @@ import {
   GraduationCap,
   ChevronRight,
   RefreshCw,
-  Send,
   Check,
   X,
   Search,
@@ -250,18 +249,6 @@ export function ProfileView() {
           <ChevronRight size={18} className="text-theme-subtext opacity-50" />
         </button>
 
-        <a className="settings-row" href="https://t.me/konyaevo_tver_helper_bot" target="_blank" rel="noopener noreferrer">
-          <div className="icon-badge">
-            <Send size={20} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="block font-semibold truncate text-sm">Открыть чат-бот</span>
-            <span className="block text-xs text-theme-subtext mt-0.5 opacity-80">
-              Расписание и уведомления в Telegram
-            </span>
-          </div>
-          <ChevronRight size={18} className="text-theme-subtext opacity-50" />
-        </a>
       </div>
 
       <HelpPanel />

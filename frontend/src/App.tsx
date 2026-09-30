@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useApp } from './context/AppContext';
 import { BottomNav } from './components/BottomNav';
 import { TodayView } from './views/TodayView';
@@ -9,11 +9,17 @@ import { TeachersView } from './views/TeachersView';
 import { ChangesView } from './views/ChangesView';
 import { ProfileView } from './views/ProfileView';
 import { FeedbackPrompt } from './components/FeedbackPrompt';
+import { ChatVersionNotice, hasSeenChatNotice } from './components/ChatVersionNotice';
+import { useTelegram } from './hooks/useTelegram';
 import { EmptyState } from './components/Ui';
 
 const AdminView = lazy(() => import('./views/AdminView'));
 
 export function App() {
+  const { user } = useTelegram();
+  const noticeKey = `konyaevo:chat-notice:v1:${user?.id ?? 'browser'}`;
+  const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
+  const noticeOpen = dismissedNotice !== noticeKey && !hasSeenChatNotice(noticeKey);
   const { activeTab, setActiveTab, loadError, loading, role, selectedGroup, selectedTeacher, isAdmin } = useApp();
   const views = { today: TodayView, tomorrow: TomorrowView, week: WeekView, classrooms: ClassroomsView,
     teachers: TeachersView, changes: ChangesView, profile: ProfileView, admin: AdminView };
@@ -31,6 +37,7 @@ export function App() {
         : <Suspense fallback={<p className="page text-theme-subtext">Загружаем раздел…</p>}><View /></Suspense>}
     </main>
     <BottomNav />
-    <FeedbackPrompt />
+    {noticeOpen && <ChatVersionNotice storageKey={noticeKey} onDismiss={() => setDismissedNotice(noticeKey)} />}
+    <FeedbackPrompt enabled={!noticeOpen} />
   </div>;
 }
