@@ -1,6 +1,6 @@
 export type UserRole = 'student' | 'teacher';
 
-export type ActiveTab = 'today' | 'tomorrow' | 'week' | 'classrooms' | 'teachers' | 'changes' | 'profile';
+export type ActiveTab = 'today' | 'tomorrow' | 'week' | 'classrooms' | 'teachers' | 'changes' | 'profile' | 'admin';
 
 export type ThemeId =
   | 'liquid-glass-dark'

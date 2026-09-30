@@ -195,3 +195,6 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 
 /* Поле отзыва не должно растягивать попап при перетаскивании угла. */
 .feedback-compact textarea { resize: none; height: 104px; overflow-y: auto; }
+
+/* Дополнительная кнопка администратора не перекрывает окно оценки. */
+.has-admin-navigation .feedback-popup { bottom: max(144px, calc(env(safe-area-inset-bottom) + 132px)); max-height: calc(85dvh - 144px); }

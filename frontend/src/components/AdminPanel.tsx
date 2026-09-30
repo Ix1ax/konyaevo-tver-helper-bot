@@ -1,4 +1,3 @@
-import { AdminFeedback } from './AdminFeedback';
 import { useEffect, useState } from 'react';
 import { ShieldCheck, RefreshCw } from 'lucide-react';
 import { useTelegram } from '../hooks/useTelegram';
@@ -22,7 +21,7 @@ interface Overview {
   changesDate: string;
 }
 
-export function AdminPanel() {
+export function AdminPanel({ section = 'users' }: { section?: 'users' | 'schedule' }) {
   const { tg } = useTelegram();
   const { currentThemeDef } = useTheme();
   const [data, setData] = useState<Overview | null>(null);
@@ -60,7 +59,8 @@ export function AdminPanel() {
   }, [initData, revision]);
 
   // Панель появляется только после разрешённого сервером ответа.
-  if (!data) return null;
+  if (!data) return <p role={error ? 'alert' : 'status'} className="notice">{error || (loading ? 'Загружаем сводку…' : 'Сводка недоступна.')}
+    <button className="button-quiet ml-2" disabled={loading} onClick={() => setRevision(v => v + 1)}>Повторить</button></p>;
 
   const stats = [
     ['Пользователей бота', data.users],
@@ -89,18 +89,17 @@ export function AdminPanel() {
         </button>
       </div>
       <dl className="grid grid-cols-2 gap-3">
-        {stats.map(([label, value]) => (
+        {stats.filter((_, index) => section === 'users' ? index < 9 : index >= 9).map(([label, value]) => (
           <div key={label} className={`p-3 rounded-2xl ${currentThemeDef.isLight ? 'bg-theme-bg' : 'bg-theme-bg'}`}>
             <dt className="text-xs text-theme-subtext">{label}</dt>
             <dd className="mt-1 text-xl font-bold text-theme-text">{value}</dd>
           </div>
         ))}
       </dl>
-      <div className="mt-4 text-sm text-theme-text">
+      {section === 'schedule' && <div className="mt-4 text-sm text-theme-text">
         <p className="font-semibold">Замены: {data.changesDate || 'ещё не загружены'}</p>
         <p className="mt-1 text-xs text-theme-subtext">Изменений: {data.changes} · Групп: {data.changedGroups}</p>
-      </div>
-      <AdminFeedback />
+      </div>}
       {error && <p role="alert" className="mt-3 text-sm text-theme-text">{error}</p>}
     </section>
   );

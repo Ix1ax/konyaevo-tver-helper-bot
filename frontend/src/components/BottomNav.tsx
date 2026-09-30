@@ -1,4 +1,4 @@
-import { Calendar, CalendarCheck, CalendarDays, Building2, Search, UserRound } from 'lucide-react';
+import { Calendar, CalendarCheck, CalendarDays, Building2, Search, UserRound, ShieldCheck } from 'lucide-react';
 import type { ActiveTab } from '../types';
 import { useApp } from '../context/AppContext';
 
@@ -8,8 +8,14 @@ const items = [
 ] as const;
 
 export function BottomNav() {
-  const { activeTab, setActiveTab } = useApp();
+  const { activeTab, setActiveTab, isAdmin } = useApp();
   return <nav aria-label="Основная навигация" className="fixed bottom-0 inset-x-0 glass-nav border-t border-theme-border z-50">
+    {isAdmin && <div className="max-w-lg mx-auto px-3 pt-2">
+      <button className="button-quiet w-full flex items-center justify-center gap-2 text-xs"
+        aria-current={activeTab === 'admin' ? 'page' : undefined} onClick={() => setActiveTab('admin')}>
+        <ShieldCheck size={20} /> Администрирование
+      </button>
+    </div>}
     <div className="max-w-lg mx-auto flex pt-2 pb-[max(env(safe-area-inset-bottom),10px)] px-2">
       {items.map(([tab, label, Icon]) => <button key={tab} onClick={() => setActiveTab(tab as ActiveTab)}
         aria-current={activeTab === tab ? 'page' : undefined}
