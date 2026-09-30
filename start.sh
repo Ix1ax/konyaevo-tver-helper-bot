@@ -3,6 +3,12 @@
 set -e
 cd "$(dirname "$0")"
 
+# Detect macOS Java if not in PATH
+if [ -z "$JAVA_HOME" ] && [ -d "/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home" ]; then
+    export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home"
+    export PATH="$JAVA_HOME/bin:$PATH"
+fi
+
 # Create .env from example if missing
 if [ ! -f .env ]; then
     if [ -f .env.example ]; then

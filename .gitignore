@@ -36,3 +36,12 @@ data/
 
 ### Local Excel test file ###
 /schedule.xlsx
+
+### Frontend (Mini App) ###
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+### Local audit and recording output ###
+/artifacts/
+/docs/audit/*.json
