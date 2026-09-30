@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import dev.ix1ax.main.model.DaySchedule;
 import dev.ix1ax.main.model.Lesson;
 import dev.ix1ax.main.util.HtmlUtils;
+import dev.ix1ax.main.util.Subgroups;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
@@ -97,39 +98,7 @@ public class ChangesParserService {
                 return;
             }
 
-            Map<String, Map<Integer, String>> newChanges = new LinkedHashMap<>();
-
-            // Row 0: Date
-            String date = csv.get(0)[0].trim().replace("\n", " ");
-            changesDate = date;
-
-            // Row 1: Header ("Группа", "1", "2", ...)
-            // Row 2+: Data
-            for (int row = 2; row < csv.size(); row++) {
-                String[] line = csv.get(row);
-                if (line.length < 1) continue;
-
-                String groupName = line[0].trim();
-                if (groupName.isEmpty()) continue;
-
-                Map<Integer, String> groupChanges = new LinkedHashMap<>();
-
-                for (int slot = 1; slot <= 6; slot++) {
-                    if (slot < line.length) {
-                        String change = line[slot].trim();
-                        if (!change.isEmpty()) {
-                            groupChanges.put(slot, change);
-                        }
-                    }
-                }
-
-                if (!groupChanges.isEmpty()) {
-                    newChanges.put(groupName, groupChanges);
-                }
-            }
-
-            // Atomic snapshot publication
-            this.changesByGroup = newChanges;
+            parseChangesCsv(csv);
 
             log.info("[CHANGES SUCCESS] Updated for date '{}': {} groups with changes",
                     changesDate, changesByGroup.size());
@@ -137,6 +106,43 @@ public class ChangesParserService {
             log.warn("[CHANGES ERROR] Failed to fetch changes: {}. Retaining previous changes in memory.", e.getMessage());
         }
     }
+
+    void parseChangesCsv(List<String[]> csv) {
+        Map<String, Map<Integer, String>> newChanges = new LinkedHashMap<>();
+
+        // Row 0: Date
+        String date = csv.get(0)[0].trim().replace("\n", " ");
+        changesDate = date;
+
+        // Row 1: Header ("Группа", "1", "2", ...)
+        // Row 2+: Data
+        for (int row = 2; row < csv.size(); row++) {
+            String[] line = csv.get(row);
+            if (line.length < 1) continue;
+
+            String groupName = line[0].trim();
+            if (groupName.isEmpty()) continue;
+
+            Map<Integer, String> groupChanges = new LinkedHashMap<>();
+
+            for (int slot = 1; slot <= 6; slot++) {
+                if (slot < line.length) {
+                    String change = line[slot].trim();
+                    if (!change.isEmpty()) {
+                        groupChanges.put(slot, change);
+                    }
+                }
+            }
+
+            if (!groupChanges.isEmpty()) {
+                newChanges.put(groupName, groupChanges);
+            }
+        }
+
+        // Atomic snapshot publication
+        this.changesByGroup = newChanges;
+    }
+
 
     // ===== Public API =====
 
@@ -184,16 +190,34 @@ public class ChangesParserService {
     }
 
     private void appendChangeDetails(StringBuilder sb, String text) {
+        appendChangeDetails(sb, text, null);
+    }
+
+    private void appendChangeDetails(StringBuilder sb, String text, String teacherName) {
         if (isCancellation(text)) {
             sb.append("❌ <b>ОТМЕНА</b>\n");
             return;
+        }
+        List<String> lines = Arrays.stream(text.split("\n")).map(String::trim).filter(v -> !v.isEmpty()).toList();
+        if (lines.size() >= 3) {
+            var subgroups = Subgroups.parse(lines.get(1), lines.get(2));
+            if (!subgroups.isEmpty()) {
+                sb.append("📖 <b>").append(HtmlUtils.escapeHtml(lines.get(0))).append("</b>\n");
+                for (var subgroup : subgroups) {
+                    if (teacherName != null && !teacherMatches(subgroup.teacher(), teacherName)) continue;
+                    sb.append("👥 <b>").append(subgroup.number()).append("-я подгруппа</b>\n")
+                            .append("👨‍🏫 ").append(HtmlUtils.escapeHtml(subgroup.teacher())).append("\n")
+                            .append("📍 <b>").append(HtmlUtils.escapeHtml(subgroup.room())).append(" ауд.</b>\n");
+                }
+                return;
+            }
         }
         int index = 0;
         for (String line : text.split("\n")) {
             String value = line.trim();
             if (value.isEmpty()) continue;
             boolean room = value.toLowerCase(java.util.Locale.ROOT).contains("ауд")
-                    || value.matches("^[0-9]{1,4}[а-яА-Яa-zA-Z]?$");
+                    || value.matches("(?iu)^(?:[0-9]{1,4}(?:-?[а-яa-z])?(?:/[0-9]{1,4}(?:-?[а-яa-z])?)*|с/[зл]|ч/з)$");
             String icon = index == 0 ? "📖 " : room ? "📍 " : index == 1 ? "👨‍🏫 " : "ℹ️ ";
             sb.append(icon).append("<b>").append(HtmlUtils.escapeHtml(value)).append("</b>\n");
             index++;
@@ -246,7 +270,7 @@ public class ChangesParserService {
                     StringBuilder entrySb = new StringBuilder();
                     entrySb.append("👥 <b>").append(HtmlUtils.escapeHtml(groupName)).append("</b> — <b>")
                             .append(slot).append(" пара</b>:\n");
-                    appendChangeDetails(entrySb, val);
+                    appendChangeDetails(entrySb, val, teacherName);
                     changeEntries.add(new TeacherChangeEntry(slot, groupName, entrySb.toString().trim()));
                 }
             }

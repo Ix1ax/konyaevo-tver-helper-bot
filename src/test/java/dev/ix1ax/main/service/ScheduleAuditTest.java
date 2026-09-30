@@ -140,7 +140,7 @@ class ScheduleAuditTest {
         when(parser.getAllRooms()).thenReturn(List.of("201", "307"));
         DaySchedule day = new DaySchedule("Понедельник");
         day.addLesson(new Lesson(2, "10:15", "МДК", "Евстигнеев А.С.", "307", "red"));
-        when(parser.getScheduleForGroupAndDay("4-ИС2", "Понедельник")).thenReturn(day);
+        when(parser.getScheduleForGroup("4-ИС2")).thenReturn(Map.of("Понедельник", day));
         api.perform(get("/api/classrooms/free").param("day", "Понедельник").param("slot", "2").param("weekType", "red"))
                 .andExpect(jsonPath("$.freeRooms[0]").value("201"))
                 .andExpect(jsonPath("$.occupiedRooms[0].room").value("307"));

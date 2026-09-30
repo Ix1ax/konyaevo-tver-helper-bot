@@ -1,5 +1,7 @@
 package dev.ix1ax.main.service;
 
+import dev.ix1ax.main.util.Subgroups;
+
 import dev.ix1ax.main.dto.DayScheduleDto;
 import dev.ix1ax.main.dto.LessonDto;
 import dev.ix1ax.main.model.DaySchedule;
@@ -182,7 +184,7 @@ final class ScheduleResolver {
                                     type = "Замена";
                                     ParsedChange parsed = parseChangeCell(ch);
                                     if (!parsed.subject.isEmpty()) subject = parsed.subject;
-                                    room = parsed.room;
+                                    room = Subgroups.teacherRoom(parsed.teacher, parsed.room, teacherName);
                                 }
                             }
                         }
@@ -231,7 +233,7 @@ final class ScheduleResolver {
                                         .subject(parsed.subject.isEmpty() ? "Замена" : parsed.subject)
                                         .teacher(teacherName)
                                         .groupName(grpName)
-                                        .room(parsed.room)
+                                        .room(Subgroups.teacherRoom(parsed.teacher, parsed.room, teacherName))
                                         .type("Замена")
                                         .changed(true)
                                         .changeText(val)
@@ -277,7 +279,7 @@ final class ScheduleResolver {
 
         for (int i = 1; i < nonBlank.size(); i++) {
             String line = nonBlank.get(i);
-            if (line.toLowerCase().contains("ауд") || line.matches("^[0-9]{1,4}[а-яА-Яa-zA-Z]?$")) {
+            if (line.toLowerCase().contains("ауд") || line.matches("(?iu)^(?:[0-9]{1,4}(?:-?[а-яa-z])?(?:\\s*/\\s*[0-9]{1,4}(?:-?[а-яa-z])?)*|с/[зл]|ч/з)$")) {
                 p.room = line.replaceAll("(?i)ауд\\.?", "").trim();
             } else if (p.teacher.isEmpty()) {
                 p.teacher = line;

@@ -1,8 +1,8 @@
 package dev.ix1ax.main.controller;
 
+import dev.ix1ax.main.util.Subgroups;
+
 import dev.ix1ax.main.dto.*;
-import dev.ix1ax.main.model.DaySchedule;
-import dev.ix1ax.main.model.Lesson;
 import dev.ix1ax.main.service.ChangesParserService;
 import dev.ix1ax.main.service.ScheduleParserService;
 import dev.ix1ax.main.service.ScheduleService;
@@ -67,7 +67,7 @@ public class ScheduleApiController {
     @GetMapping("/teachers")
     public ResponseEntity<TeachersResponseDto> getTeachers() {
         List<String> letters = scheduleService.getTeacherFirstLetters();
-        List<String> teachers = new ArrayList<>(scheduleParser.getAllTeachers());
+        List<String> teachers = new ArrayList<>(scheduleService.getAllTeachers());
         Collections.sort(teachers);
 
         return ResponseEntity.ok(TeachersResponseDto.builder()
@@ -145,21 +145,26 @@ public class ScheduleApiController {
         Map<String, List<String>> groupsByCourse = scheduleService.getGroupsByCourse();
         for (List<String> groups : groupsByCourse.values()) {
             for (String groupName : groups) {
-                DaySchedule ds = scheduleParser.getScheduleForGroupAndDay(groupName, day);
-                if (ds == null || !ds.hasLessons()) continue;
+                DayScheduleDto ds = scheduleService.getResolvedGroupSchedule(groupName).get(day);
+                if (ds == null || ds.getLessons().isEmpty()) continue;
 
-                for (Lesson lesson : ds.getLessons()) {
+                for (LessonDto lesson : ds.getLessons()) {
+                    if (lesson.isCanceled()) continue;
                     if (lesson.getLessonNumber() == slot) {
                         if (lesson.getWeekType() == null || lesson.getWeekType().equalsIgnoreCase(weekType)) {
                             String room = lesson.getRoom();
                             if (room != null && !room.isBlank()) {
-                                occupiedMap.putIfAbsent(room.trim(), ClassroomsResponseDto.OccupiedRoomDto.builder()
-                                        .room(room.trim())
-                                        .subject(lesson.getSubject())
-                                        .teacher(lesson.getTeacher())
-                                        .groupName(groupName)
-                                        .time(lesson.getTime())
-                                        .build());
+                                for (String individualRoom : Subgroups.rooms(room)) {
+                                    occupiedMap.putIfAbsent(individualRoom, ClassroomsResponseDto.OccupiedRoomDto.builder()
+                                            .room(individualRoom)
+                                            .subject(lesson.getSubject())
+                                            .teacher(Subgroups.parse(lesson.getTeacher(), room).stream()
+                                                    .filter(e -> e.room().equals(individualRoom)).map(e -> e.teacher())
+                                                    .findFirst().orElse(lesson.getTeacher()))
+                                            .groupName(groupName)
+                                            .time(lesson.getTime())
+                                            .build());
+                                }
                             }
                         }
                     }
@@ -191,7 +196,7 @@ public class ScheduleApiController {
     public ResponseEntity<List<String>> searchTeachers(@RequestParam(defaultValue = "") String q) {
         String query = q.trim().toLowerCase();
         List<String> result = new ArrayList<>();
-        for (String t : scheduleParser.getAllTeachers()) {
+        for (String t : scheduleService.getAllTeachers()) {
             if (t.toLowerCase().contains(query)) {
                 result.add(t);
             }

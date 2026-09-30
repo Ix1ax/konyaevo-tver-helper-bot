@@ -1,7 +1,7 @@
 package dev.ix1ax.main.service;
 
-import com.opencsv.CSVReader;
-import com.opencsv.exceptions.CsvException;
+import dev.ix1ax.main.util.Subgroups;
+
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,13 +13,11 @@ import dev.ix1ax.main.model.DaySchedule;
 import dev.ix1ax.main.model.Lesson;
 
 import java.io.ByteArrayInputStream;
-import java.io.InputStreamReader;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +25,7 @@ import java.util.regex.Pattern;
 
 /**
  * Загружает XLSX из Google Таблиц и разбирает книгу в памяти через POI.
- * При ошибке использует CSV, но в нём нет рисунков и форматирования ячеек.
+ * При ошибке сохраняет предыдущие данные: CSV теряет маркеры недель.
  */
 @Service
 public class ScheduleParserService {
@@ -37,14 +35,8 @@ public class ScheduleParserService {
     private static final String XLSX_URL_TEMPLATE =
             "https://docs.google.com/spreadsheets/d/%s/export?format=xlsx";
 
-    private static final String CSV_URL_TEMPLATE =
-            "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&gid=%s";
-
     @Value("${schedule.spreadsheet.id}")
     private String spreadsheetId;
-
-    @Value("${schedule.sheet.gids}")
-    private String sheetGidsStr;
 
     @Value("${schedule.sheet.names}")
     private String sheetNamesStr;
@@ -93,7 +85,6 @@ public class ScheduleParserService {
     public void refreshSchedule() {
         log.info("Refreshing schedule data from Google Sheets...");
         try {
-            String[] gids = sheetGidsStr.split(",");
             String[] names = sheetNamesStr.split(",");
 
             Map<String, Map<String, DaySchedule>> newScheduleByGroup = new HashMap<>();
@@ -112,12 +103,12 @@ public class ScheduleParserService {
                     }
                 }
             } catch (Exception e) {
-                log.warn("Failed to stream or parse XLSX workbook ({}), falling back to CSV...", e.getMessage());
+                log.warn("Failed to stream or parse XLSX workbook ({}). Keeping previous schedule.", e.getMessage());
             }
 
             if (!xlsxSuccess) {
-                log.info("[SCHEDULE] Using CSV fallback parser...");
-                fallbackParseCsv(gids, names, newScheduleByGroup, newGroupsByCourse, newTeachers);
+                log.warn("[SCHEDULE WARNING] XLSX unavailable. Retaining {} cached groups; CSV lacks week markers and will not be published.", scheduleByGroup.size());
+                return;
             }
 
             if (newScheduleByGroup.isEmpty()) {
@@ -163,6 +154,7 @@ public class ScheduleParserService {
                               Set<String> teachers) throws IOException {
         try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(bytes))) {
             int sheetCount = wb.getNumberOfSheets();
+            if (sheetCount < names.length) throw new IOException("Incomplete workbook: " + sheetCount + " sheets, expected " + names.length);
             for (int i = 0; i < sheetCount; i++) {
                 Sheet sheet = wb.getSheetAt(i);
                 String courseName = i < names.length ? names[i].trim() : sheet.getSheetName();
@@ -300,7 +292,8 @@ public class ScheduleParserService {
                         }
                     }
 
-                    if (entryCount == 1 && !roomLines.isEmpty() && roomLines.size() > 1) {
+                    if (entryCount == 1 && !roomLines.isEmpty() && roomLines.size() > 1
+                            && Subgroups.parse(entry.teacher, assignedRoom).isEmpty()) {
                         if (Lesson.WEEK_BLUE.equals(weekType)) {
                             assignedRoom = roomLines.get(roomLines.size() - 1);
                         } else if (Lesson.WEEK_RED.equals(weekType)) {
@@ -308,6 +301,20 @@ public class ScheduleParserService {
                         }
                     }
 
+                    if (entry.embeddedRoom != null) assignedRoom = entry.embeddedRoom;
+                    else {
+                        int teacherCount = entry.teacher == null || entry.teacher.isBlank() ? 1 : entry.teacher.split(",").length;
+                        int total = parsed.entries.stream().mapToInt(v -> v.teacher == null || v.teacher.isBlank() ? 1 : v.teacher.split(",").length).sum();
+                        var orderedRooms = Subgroups.rooms(roomCell);
+                        if (orderedRooms.size() == total) {
+                            int offset = 0;
+                            for (int before = 0; before < e; before++) {
+                                String names = parsed.entries.get(before).teacher;
+                                offset += names == null || names.isBlank() ? 1 : names.split(",").length;
+                            }
+                            assignedRoom = String.join("/", orderedRooms.subList(offset, offset + teacherCount));
+                        }
+                    }
                     Lesson lesson = new Lesson(lessonNum, time, entry.subject, entry.teacher, assignedRoom, weekType);
                     scheduleMap.get(groupNames.get(g))
                             .computeIfAbsent(currentDay, DaySchedule::new)
@@ -385,167 +392,6 @@ public class ScheduleParserService {
         return null;
     }
 
-    private void fallbackParseCsv(String[] gids, String[] names,
-                                  Map<String, Map<String, DaySchedule>> newScheduleByGroup,
-                                  Map<String, List<String>> newGroupsByCourse,
-                                  Set<String> newTeachers) {
-        for (int i = 0; i < gids.length; i++) {
-            String gid = gids[i].trim();
-            String courseName = i < names.length ? names[i].trim() : "Курс " + (i + 1);
-
-            log.info("Parsing CSV sheet: {} (gid={})", courseName, gid);
-            List<String[]> csv = fetchCsv(gid);
-            if (csv == null || csv.isEmpty()) {
-                log.warn("Empty CSV for gid={}", gid);
-                continue;
-            }
-
-            parseSheet(csv, courseName, newScheduleByGroup, newGroupsByCourse, newTeachers);
-        }
-    }
-
-    private List<String[]> fetchCsv(String gid) {
-        String url = String.format(CSV_URL_TEMPLATE, spreadsheetId, gid);
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(30))
-                    .header("User-Agent", "Mozilla/5.0")
-                    .GET()
-                    .build();
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            if (response.statusCode() != 200) {
-                log.error("Failed to fetch CSV from gid={}: HTTP {}", gid, response.statusCode());
-                return null;
-            }
-            try (CSVReader reader = new CSVReader(new InputStreamReader(
-                    new ByteArrayInputStream(response.body()), StandardCharsets.UTF_8))) {
-                return reader.readAll();
-            }
-        } catch (IOException | InterruptedException | com.opencsv.exceptions.CsvException e) {
-            log.error("Failed to fetch CSV from gid={}: {}", gid, e.getMessage());
-            return null;
-        }
-    }
-
-    private void parseSheet(List<String[]> csv, String courseName,
-                            Map<String, Map<String, DaySchedule>> scheduleMap,
-                            Map<String, List<String>> groupsMap,
-                            Set<String> teachers) {
-        if (csv.size() < 2) return;
-
-        // First row contains group names in columns 3, 5, 7, ...
-        String[] header = csv.get(0);
-        List<String> groupNames = new ArrayList<>();
-        List<Integer> groupColumns = new ArrayList<>();
-
-        for (int col = 3; col < header.length; col += 2) {
-            String name = header[col].trim();
-            if (!name.isEmpty()) {
-                groupNames.add(name);
-                groupColumns.add(col);
-            }
-        }
-
-        List<String> sortedGroupNames = new ArrayList<>(groupNames);
-        Collections.sort(sortedGroupNames);
-        groupsMap.put(courseName, sortedGroupNames);
-
-        // Initialize schedule maps for each group
-        for (String group : groupNames) {
-            scheduleMap.putIfAbsent(group, new LinkedHashMap<>());
-        }
-
-        // Parse schedule rows
-        String currentDay = null;
-        for (int row = 1; row < csv.size(); row++) {
-            String[] line = csv.get(row);
-            if (line.length < 3) continue;
-
-            // Column 0: day name (only in first row of the day block)
-            String dayCell = line[0].trim();
-            if (!dayCell.isEmpty()) {
-                currentDay = dayCell;
-            }
-            if (currentDay == null) continue;
-
-            // Column 1: time
-            String time = line[1].trim();
-            if (time.isEmpty()) continue;
-
-            // Column 2: lesson number
-            String lessonNumStr = line[2].trim();
-            int lessonNum;
-            try {
-                lessonNum = Integer.parseInt(lessonNumStr);
-            } catch (NumberFormatException e) {
-                continue; // Skip non-lesson rows (like "Семьеведение" break row)
-            }
-
-            // Parse each group's lesson
-            for (int g = 0; g < groupNames.size(); g++) {
-                int subjectCol = groupColumns.get(g);
-                int roomCol = subjectCol + 1;
-
-                String subjectCell = subjectCol < line.length ? line[subjectCol].trim() : "";
-                String roomCell = roomCol < line.length ? line[roomCol].trim() : "";
-
-                if (subjectCell.isEmpty() || subjectCell.equalsIgnoreCase("ПРАКТИКА")) {
-                    if (subjectCell.equalsIgnoreCase("ПРАКТИКА")) {
-                        Lesson lesson = new Lesson(lessonNum, time, "ПРАКТИКА", "", "");
-                        scheduleMap.get(groupNames.get(g))
-                                .computeIfAbsent(currentDay, DaySchedule::new)
-                                .addLesson(lesson);
-                    }
-                    continue;
-                }
-
-                // Parse subject cell: handles multi-line subjects and alternating weeks
-                ParsedCell parsed = parseSubjectCell(subjectCell);
-                int entryCount = parsed.entries.size();
-
-                // Parse room lines if multiple entries exist
-                List<String> roomLines = new ArrayList<>();
-                for (String r : roomCell.split("\n")) {
-                    String trimmed = r.trim();
-                    if (!trimmed.isEmpty()) {
-                        roomLines.add(trimmed);
-                    }
-                }
-
-                for (int e = 0; e < entryCount; e++) {
-                    ParsedCell.Entry entry = parsed.entries.get(e);
-                    if (entry.teacher != null && !entry.teacher.isBlank()) {
-                        for (String t : entry.teacher.split(",\\s*")) {
-                            String trimmedT = t.trim();
-                            if (!trimmedT.isEmpty()) {
-                                teachers.add(trimmedT);
-                            }
-                        }
-                    }
-
-                    String assignedRoom = roomCell;
-                    if (entryCount > 1 && !roomLines.isEmpty()) {
-                        assignedRoom = (e < roomLines.size()) ? roomLines.get(e) : roomLines.get(roomLines.size() - 1);
-                    }
-
-                    String weekType = null;
-                    if (entryCount == 2) {
-                        weekType = (e == 0) ? Lesson.WEEK_RED : Lesson.WEEK_BLUE;
-                    }
-
-                    Lesson lesson = new Lesson(lessonNum, time, entry.subject, entry.teacher, assignedRoom, weekType);
-                    scheduleMap.get(groupNames.get(g))
-                            .computeIfAbsent(currentDay, DaySchedule::new)
-                            .addLesson(lesson);
-                }
-            }
-        }
-    }
-
-    /**
-     * Parse a subject cell that may contain multiple subjects/teachers and multiline subject names.
-     */
     private ParsedCell parseSubjectCell(String cell) {
         ParsedCell result = new ParsedCell();
         String[] lines = cell.split("\n");
@@ -563,7 +409,9 @@ public class ScheduleParserService {
 
         List<String> curSubjectLines = new ArrayList<>();
         for (String line : cleanLines) {
-            if (looksLikeTeacherName(line)) {
+            if (line.matches("(?iu)^[0-9]+[а-яa-z]?(?:\\s*[/,]\\s*[0-9]+[а-яa-z]?)*\\s*ауд\\.?$") && !result.entries.isEmpty()) {
+                result.entries.get(result.entries.size() - 1).embeddedRoom = line;
+            } else if (looksLikeTeacherName(line)) {
                 String subject = String.join(" ", curSubjectLines);
                 result.entries.add(new ParsedCell.Entry(subject, line));
                 curSubjectLines.clear();
@@ -620,7 +468,7 @@ public class ScheduleParserService {
                                 lesson.getTime(),
                                 lesson.getSubject(),
                                 groupName, // Store group name instead of teacher
-                                lesson.getRoom(),
+                                Subgroups.teacherRoom(teacher, lesson.getRoom(), tName),
                                 lesson.getWeekType()
                         );
 
@@ -681,7 +529,7 @@ public class ScheduleParserService {
                 for (Lesson l : ds.getLessons()) {
                     String r = l.getRoom();
                     if (r != null && !r.isBlank() && !r.equalsIgnoreCase("дистант") && !r.equalsIgnoreCase("zoom")) {
-                        rooms.add(r.trim());
+                        rooms.addAll(Subgroups.rooms(r));
                     }
                 }
             }
@@ -738,6 +586,7 @@ public class ScheduleParserService {
         static class Entry {
             String subject;
             String teacher;
+            String embeddedRoom;
 
             Entry(String subject, String teacher) {
                 this.subject = subject;

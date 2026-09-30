@@ -1,5 +1,7 @@
 package dev.ix1ax.main.dto;
 
+import dev.ix1ax.main.util.Subgroups;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,6 +12,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LessonDto {
+    public java.util.List<Subgroups.Entry> getSubgroups() {
+        return Subgroups.parse(teacher, room);
+    }
+
     private int lessonNumber;
     private String time;
     private String subject;

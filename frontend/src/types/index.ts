@@ -10,6 +10,7 @@ export interface Lesson {
   lessonNumber: number;
   time: string;
   subject: string;
+  subgroups?: { number: number; teacher: string; room: string }[];
   teacher?: string;
   room?: string;
   weekType?: string | null; // "red", "blue", or null/all

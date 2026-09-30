@@ -217,12 +217,26 @@ public class ScheduleService {
 
     // ===== Schedule for Teachers =====
 
+    public List<String> getAllTeachers() {
+        Set<String> teachers = new TreeSet<>(scheduleParser.getAllTeachers());
+        if (changesParser.getOverlayDayName() != null) {
+            var pattern = java.util.regex.Pattern.compile("[А-ЯЁ][а-яё-]+\\s+[А-ЯЁ]\\.\\s*[А-ЯЁ]\\.");
+            for (var changes : changesParser.getAllChanges().values()) {
+                for (String text : changes.values()) {
+                    var matcher = pattern.matcher(text);
+                    while (matcher.find()) teachers.add(matcher.group().replaceAll("\\.\\s+", "."));
+                }
+            }
+        }
+        return new ArrayList<>(teachers);
+    }
+
     public List<String> getTeacherFirstLetters() {
-        return scheduleParser.getTeacherFirstLetters();
+        return getAllTeachers().stream().map(name -> name.substring(0, 1)).distinct().sorted().toList();
     }
 
     public List<String> getTeachersByLetter(String letter) {
-        return scheduleParser.getTeachersByLetter(letter);
+        return getAllTeachers().stream().filter(name -> name.startsWith(letter)).toList();
     }
 
     public String getScheduleTextForTeacher(String teacherName, String dayName) {

@@ -1,5 +1,7 @@
 package dev.ix1ax.main.model;
 
+import dev.ix1ax.main.util.Subgroups;
+
 import dev.ix1ax.main.util.HtmlUtils;
 
 /**
@@ -99,6 +101,15 @@ public class Lesson {
         }
 
         sb.append("📖 <b>").append(HtmlUtils.escapeHtml(subject)).append("</b>\n");
+        var subgroups = Subgroups.parse(teacher, room);
+        if (!subgroups.isEmpty()) {
+            for (var subgroup : subgroups) {
+                sb.append("👥 <b>").append(subgroup.number()).append("-я подгруппа</b>\n")
+                        .append("👨‍🏫 ").append(HtmlUtils.escapeHtml(subgroup.teacher())).append("\n")
+                        .append("📍 Ауд. <b>").append(HtmlUtils.escapeHtml(subgroup.room())).append("</b>\n");
+            }
+            return sb.toString().trim();
+        }
         if (teacher != null && !teacher.isBlank()) {
             sb.append("👨‍🏫 ").append(HtmlUtils.escapeHtml(teacher)).append("\n");
         }
