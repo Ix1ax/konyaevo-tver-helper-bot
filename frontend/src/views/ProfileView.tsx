@@ -151,19 +151,16 @@ export function ProfileView() {
 
           {role === 'student' ? (
             <>
-              <label htmlFor="profile-course" className="block text-xs text-theme-subtext mb-1.5 font-medium">
-                Курс
-              </label>
-              <select
-                id="profile-course"
-                className="field mb-3 text-xs"
-                value={activeCourse}
-                onChange={(event) => setCourse(event.target.value)}
-              >
+              <p id="profile-course-label" className="block text-xs text-theme-subtext mb-2 font-medium">Курс</p>
+              <div className="course-selector mb-3" role="group" aria-labelledby="profile-course-label">
                 {groupsData.courses.map((name) => (
-                  <option key={name} value={name}>{name}</option>
+                  <button type="button" key={name} className="course-option"
+                    aria-pressed={activeCourse === name} disabled={savingProfile}
+                    onClick={() => { setCourse(name); haptic.selection(); }}>
+                    {name}
+                  </button>
                 ))}
-              </select>
+              </div>
 
               <div className="grid grid-cols-3 gap-2">
                 {(groupsData.groupsByCourse[activeCourse] || []).map((group) => (

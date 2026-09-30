@@ -217,3 +217,8 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 
 .loading-state.loading-compact { min-height: 0; flex-direction: row; gap: 10px; padding: 12px 20px; }
 .loading-compact .loading-brand { display: none; }
+
+.course-selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 5px; padding: 5px; border: 1px solid var(--color-border); background: var(--color-bg); border-radius: 15px; }
+.course-option { min-width: 0; min-height: 42px; padding: 8px 4px; border-radius: 10px; color: var(--color-subtext); font-size: 12px; font-weight: 600; transition: background-color .15s, color .15s; }
+.course-option[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
+.course-option:hover:not([aria-pressed="true"]):not(:disabled) { background: var(--color-card-hover); color: var(--color-text); }
