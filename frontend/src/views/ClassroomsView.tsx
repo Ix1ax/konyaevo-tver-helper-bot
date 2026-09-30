@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
+import { LoadingIndicator } from '../components/Ui';
 import { Header } from '../components/Header';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -140,7 +141,7 @@ export function ClassroomsView() {
       {error ? (
         <p role="alert" className="notice error-notice">{error}</p>
       ) : loading ? (
-        <p className="text-sm text-theme-subtext py-8 text-center font-medium">Загружаем данные аудиторий…</p>
+        <LoadingIndicator label="Загружаем аудитории…" />
       ) : (
         <>
           {/* SECTION: СВОБОДНО (matching blue-bordered badge grid in reference) */}
@@ -183,23 +184,21 @@ export function ClassroomsView() {
                 return (
                   <div
                     key={`${room.room}-${idx}`}
-                    className="surface rounded-2xl p-3.5 flex items-center justify-between transition"
+                    className="surface rounded-2xl p-3.5 room-result transition"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="text-lg font-black font-unbounded text-theme-text min-w-[52px]">
-                        {room.room}
-                      </div>
-                      <div className="min-w-0">
+                    <div className="room-number font-black font-unbounded text-theme-text">
+                      {room.room.split(/\s+/).map((number, index) => <span key={index}>{number}</span>)}
+                    </div>
+                    <div className="min-w-0">
                         <div className="text-xs font-bold text-theme-text truncate">
                           {room.subject}
                         </div>
                         <div className="text-[11px] text-theme-subtext opacity-70 truncate mt-0.5">
                           {room.teacher} · {room.groupName}
                         </div>
-                      </div>
                     </div>
 
-                    <div className="text-right whitespace-nowrap pl-2 text-[11px] font-semibold opacity-65">
+                    <div className="text-right whitespace-nowrap text-[11px] font-semibold opacity-65">
                       до {endTime}
                     </div>
                   </div>
