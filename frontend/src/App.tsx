@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { useApp } from './context/AppContext';
 import { BottomNav } from './components/BottomNav';
 import { TodayView } from './views/TodayView';
@@ -13,7 +13,8 @@ import { ChatVersionNotice, hasSeenChatNotice } from './components/ChatVersionNo
 import { useTelegram } from './hooks/useTelegram';
 import { EmptyState, LoadingIndicator } from './components/Ui';
 
-const AdminView = lazy(() => import('./views/AdminView'));
+import AdminView from './views/AdminView';
+import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 
 export function App() {
   const { user } = useTelegram();
@@ -35,7 +36,7 @@ export function App() {
         ? <div className="page"><EmptyState title={loading ? 'Загружаем расписание' : loadError ? 'Данные недоступны' : 'Ваше расписание'}>
             {loading ? 'Это займёт несколько секунд.' : loadError ? 'Повторите загрузку в профиле.' : 'Выберите группу или преподавателя.'}
           </EmptyState><button className="button-quiet w-full" onClick={() => setActiveTab('profile')}>Открыть профиль</button></div>
-        : <Suspense fallback={<LoadingIndicator label="Загружаем раздел…" />}><View /></Suspense>}
+        : <ViewErrorBoundary key={activeTab} onBack={() => setActiveTab('profile')}><View /></ViewErrorBoundary>}
     </main>
     <BottomNav />
     {noticeOpen && <ChatVersionNotice storageKey={noticeKey} onDismiss={() => setDismissedNotice(noticeKey)} />}
