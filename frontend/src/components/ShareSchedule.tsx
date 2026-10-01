@@ -17,6 +17,8 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
   const [prepared, setPrepared] = useState<{ id: string; imageUrl: string } | null>(null);
   const tg = window.Telegram?.WebApp;
   const telegramShare = Boolean(tg?.initData && tg?.isVersionAtLeast?.('8.0') && typeof tg?.shareMessage === 'function');
+  const operation = useRef(false);
+  const [busyAction, setBusyAction] = useState<'share' | 'download' | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -64,30 +66,59 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
     setPrepared(message);
     return message;
   };
+  const finishOperation = () => { operation.current = false; setBusy(false); setBusyAction(null); };
+  useEffect(() => {
+    if (!tg?.onEvent) return;
+    const failed = ({error: reason}: {error?: string}) => {
+      finishOperation();
+      if (reason && reason !== 'USER_DECLINED') {
+        setPrepared(null);
+        setError(`Telegram не отправил картинку (${reason}). Попробуйте ещё раз.`);
+      }
+    };
+    tg.onEvent('shareMessageFailed', failed);
+    return () => tg.offEvent?.('shareMessageFailed', failed);
+  }, [tg]);
   const download = async () => {
-    if (!image || busy) return;
+    if (!image || operation.current) return;
     if (telegramShare && typeof tg.downloadFile === 'function') {
-      setBusy(true); setError('');
-      try { const message = await prepare(); tg.downloadFile({ url: message.imageUrl, file_name: 'konyaevo-schedule.jpg' }); }
-      catch (error) { setError(error instanceof Error ? error.message : 'Не удалось сохранить через Telegram. Попробуйте ещё раз.'); }
-      finally { setBusy(false); }
+      operation.current = true; setBusy(true); setBusyAction('download'); setError('');
+      try {
+        const message = await prepare();
+        try {
+          // Telegram releases its popup lock when it reports acceptance OR cancellation.
+          tg.downloadFile({ url: message.imageUrl, file_name: 'konyaevo-schedule.jpg' }, () => finishOperation());
+        } catch (error) {
+          if (error instanceof Error && error.message === 'WebAppDownloadFilePopupOpened') {
+            // Some clients fail to report closing the native popup. Open the same file normally.
+            tg.openLink(message.imageUrl);
+            finishOperation();
+          } else throw error;
+        }
+      } catch (error) {
+        finishOperation();
+        setError(error instanceof Error ? error.message : 'Не удалось сохранить через Telegram. Попробуйте ещё раз.');
+      }
       return;
     }
     const a = document.createElement('a'); a.href = image.url; a.download = image.file.name;
     document.body.append(a); a.click(); a.remove();
   };
   const share = async () => {
-    if (!image || busy) return;
-    setBusy(true); setError('');
+    if (!image || operation.current) return;
+    operation.current = true; setBusy(true); setBusyAction('share'); setError('');
     try {
       if (telegramShare) {
         const message = await prepare();
-        tg.shareMessage(message.id, () => setBusy(false));
-      } else await navigator.share({ files: [image.file], title: `Коняево · ${options.target}`, text: scheduleCaption(options) });
-    }
-    catch (error) {
+        tg.shareMessage(message.id, () => finishOperation());
+      } else {
+        await navigator.share({ files: [image.file], title: `Коняево · ${options.target}`, text: scheduleCaption(options) });
+        finishOperation();
+      }
+    } catch (error) {
+      finishOperation();
       if (!(error instanceof DOMException && error.name === 'AbortError')) setError(error instanceof Error ? error.message : 'Отправка недоступна. Сохраните картинку и прикрепите её в Telegram.');
-    } finally { setBusy(false); }
+    }
   };
   return <>
     <button ref={trigger} type="button" className={fullWidth ? 'button-quiet w-full flex items-center justify-center gap-2 text-xs' : 'icon-button surface'} disabled={disabled} onClick={() => setOpen(true)} title="Поделиться расписанием" aria-label="Поделиться расписанием"><Share2 size={18} />{fullWidth && 'Поделиться расписанием'}</button>
@@ -99,8 +130,8 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
         {error && <p role="alert" className="notice error-notice my-3">{error}</p>}
         {image && <div className="mt-4 space-y-2">
           <p className="text-xs text-theme-subtext whitespace-pre-line p-3 surface rounded-xl">{scheduleCaption(options)}</p>
-          {(telegramShare || image.canShare) && <button type="button" className="button-primary w-full" disabled={busy} onClick={share}><Share2 size={18} />{busy ? 'Открываем отправку…' : telegramShare ? 'Отправить в Telegram' : 'Поделиться картинкой'}</button>}
-          <button type="button" className={`${telegramShare || image.canShare ? 'button-quiet' : 'button-primary'} w-full`} disabled={busy} onClick={download}><Download size={18} />Сохранить картинку</button>
+          {(telegramShare || image.canShare) && <button type="button" className="button-primary w-full" disabled={busy} onClick={share}><Share2 size={18} />{busyAction === 'share' ? 'Выберите чат в Telegram…' : telegramShare ? 'Отправить в Telegram' : 'Поделиться картинкой'}</button>}
+          <button type="button" className={`${telegramShare || image.canShare ? 'button-quiet' : 'button-primary'} w-full`} disabled={busy} onClick={download}><Download size={18} />{busyAction === 'download' ? 'Окно сохранения открыто…' : 'Сохранить картинку'}</button>
           <p className="text-xs text-theme-subtext leading-relaxed">{telegramShare ? 'Выберите чат — Telegram отправит картинку с кнопкой бота.' : image.canShare ? 'Выберите Telegram и получателя в меню отправки.' : 'Сохраните картинку, затем прикрепите её в нужный чат Telegram.'}</p>
         </div>}
       </section>

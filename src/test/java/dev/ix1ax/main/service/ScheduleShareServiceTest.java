@@ -14,6 +14,20 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ScheduleShareServiceTest {
+    @Test void acceptsFiveHundredImagesAndRejectsTheNextUntilSpaceIsReleased() {
+        var service = new ScheduleShareService(new ObjectMapper(), "test-token", "https://api.telegram.org/bot", "https://example.test/api", "example_bot");
+        String first = null;
+        for (int user = 1; user <= 500; user++) {
+            String id = ReflectionTestUtils.invokeMethod(service, "store", (long) user, new byte[]{1});
+            if (user == 1) first = id;
+        }
+        assertEquals(503, assertThrows(ResponseStatusException.class,
+                () -> ReflectionTestUtils.invokeMethod(service, "store", 501L, new byte[]{1})).getStatusCode().value());
+        @SuppressWarnings("unchecked")
+        var images = (java.util.Map<String, Object>) ReflectionTestUtils.getField(service, "images");
+        images.remove(first);
+        assertNotNull(ReflectionTestUtils.invokeMethod(service, "store", 501L, new byte[]{1}));
+    }
     private byte[] picture(int width, String format) throws Exception {
         var out = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(width, 100, BufferedImage.TYPE_INT_RGB), format, out);

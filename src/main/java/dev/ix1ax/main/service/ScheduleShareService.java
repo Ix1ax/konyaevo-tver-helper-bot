@@ -17,6 +17,8 @@ import java.util.*;
 public class ScheduleShareService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ScheduleShareService.class);
     private static final int MAX_BYTES = 650_000;
+    private static final int MAX_IMAGES = 500;
+    private static final long MAX_CACHE_BYTES = 325_000_000L;
     private final Map<String, Image> images = new LinkedHashMap<>();
     private final ObjectMapper json;
     private final String token, apiBase, publicBase, username;
@@ -81,7 +83,9 @@ public class ScheduleShareService {
         images.entrySet().removeIf(e -> e.getValue().expires < now);
         if (images.values().stream().anyMatch(image -> image.user == user && now - image.created < 10_000))
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Подождите несколько секунд");
-        if (images.size() >= 50) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Попробуйте позже");
+        long cachedBytes = images.values().stream().mapToLong(image -> image.bytes.length).sum();
+        if (images.size() >= MAX_IMAGES || cachedBytes + bytes.length > MAX_CACHE_BYTES)
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Попробуйте позже");
         String id = UUID.randomUUID().toString();
         images.put(id, new Image(bytes, user, now, now + Duration.ofMinutes(30).toMillis()));
         return id;
