@@ -52,6 +52,19 @@ export async function signedRequest<T>(path: string, body?: unknown): Promise<T>
       headers: { 'X-Telegram-Init-Data': initData, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    if (!response.ok && path.startsWith('/share/')) {
+      const message: Record<number, string> = {
+        400: 'Сервер отклонил картинку расписания.',
+        401: 'Откройте приложение заново через Telegram.',
+        403: 'Нет доступа к подготовке картинки.',
+        404: 'API отправки картинки недоступно на сервере.',
+        413: 'Картинка слишком большая для отправки.',
+        429: 'Подождите несколько секунд перед повторной отправкой.',
+        502: 'Сервер не смог подготовить сообщение в Telegram. Нужна проверка серверных логов.',
+        503: 'Сервис отправки занят. Попробуйте позже.',
+      };
+      throw new Error(message[response.status] || `Ошибка подготовки картинки: HTTP ${response.status}.`);
+    }
     if (!response.ok) throw new Error(response.status === 401 ? 'Откройте приложение заново через Telegram.' : response.status === 409 ? 'Оценка уже сохранена.' : 'Не удалось выполнить запрос. Попробуйте ещё раз.');
     if (response.status === 204) return undefined as T;
     return await response.json();

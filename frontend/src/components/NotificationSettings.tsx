@@ -1,25 +1,29 @@
 import { useEffect, useState } from 'react';
-import { Bell, Moon } from 'lucide-react';
+import { Bell, Moon, CircleAlert, CircleCheck, LoaderCircle } from 'lucide-react';
 import { profileRequest, SavedProfile } from '../api/client';
 import { TimePicker } from './TimePicker';
 import { useApp } from '../context/AppContext';
+
+const notificationKey = (profile: SavedProfile) => JSON.stringify([profile.changes, profile.tomorrow, profile.time, [...profile.days].sort((a,b)=>a-b)]);
 
 export function NotificationSettings() {
   const { role, selectedGroup, selectedTeacher } = useApp();
   const [settings, setSettings] = useState<SavedProfile>();
   const [error, setError] = useState('');
+  const [baseline, setBaseline] = useState('');
+  const dirty = Boolean(settings && baseline && notificationKey(settings) !== baseline);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let active = true;
-    profileRequest().then(data => { if (active) setSettings(data); })
+    profileRequest().then(data => { if (active) { setSettings(data); setBaseline(notificationKey(data)); } })
       .catch(e => { if (active) setError(e.message); });
     return () => { active = false; };
   }, []);
   async function save() {
     if (!settings) return;
     setSaving(true); setError(''); setSaved(false);
-    try { setSettings(await profileRequest({ changes: settings.changes, tomorrow: settings.tomorrow, time: settings.time, days: settings.days, role, ...(role === 'student' ? { group: selectedGroup } : { teacher: selectedTeacher }) })); setSaved(true); }
+    try { const data = await profileRequest({ changes: settings.changes, tomorrow: settings.tomorrow, time: settings.time, days: settings.days, role, ...(role === 'student' ? { group: selectedGroup } : { teacher: selectedTeacher }) }); setSettings(data); setBaseline(notificationKey(data)); setSaved(true); }
     catch (e) { setError(e instanceof Error ? e.message : 'Не удалось сохранить настройки.'); }
     finally { setSaving(false); }
   }
@@ -49,10 +53,14 @@ export function NotificationSettings() {
           </div>
           {!settings.days.length && <p className="text-xs text-theme-subtext">Дни не выбраны: уведомления не будут приходить.</p>}
           <p className="text-xs text-theme-subtext">Бот отправит сообщения для выбранного в профиле расписания. Изменения вступят в силу после сохранения.</p>
+          {(dirty || saved || saving) && <div role="status" aria-live="polite" className={`notification-status ${saving ? 'is-saving' : dirty ? 'is-dirty' : 'is-saved'}`}>
+            {saving ? <LoaderCircle size={20} className="animate-spin" aria-hidden="true" /> : dirty ? <CircleAlert size={20} aria-hidden="true" /> : <CircleCheck size={20} aria-hidden="true" />}
+            <div><p className="text-sm font-semibold">{saving ? 'Сохраняем настройки' : dirty ? 'Есть несохранённые изменения' : 'Настройки сохранены'}</p>
+              <p className="text-xs text-theme-subtext mt-1">{saving ? 'Подождите немного' : dirty ? 'Нажмите «Сохранить уведомления», чтобы применить их.' : 'Уведомления будут приходить по этим настройкам.'}</p></div>
+          </div>}
           <button type="button" className="button-primary w-full" disabled={saving || !settings.time} onClick={save}>{saving ? 'Сохраняем…' : 'Сохранить уведомления'}</button>
         </div>
       </>}
-      {saved && <p role="status" className="p-4 text-sm text-theme-accent">Уведомления сохранены.</p>}
       {error && <p role="alert" className="p-4 text-sm text-theme-subtext">{error}</p>}
     </div>
   </>;

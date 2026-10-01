@@ -244,3 +244,11 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .time-option[aria-pressed="true"] { color: #fff; background: var(--color-accent); }
 .has-share-navigation .feedback-popup { bottom: max(144px, calc(env(safe-area-inset-bottom) + 132px)); max-height: calc(85dvh - 144px); }
 .has-share-navigation.has-admin-navigation .feedback-popup { bottom: max(200px, calc(env(safe-area-inset-bottom) + 188px)); max-height: calc(85dvh - 200px); }
+
+.lesson-metadata > * { min-height: 28px; height: auto; }
+.lesson-metadata svg { flex-shrink: 0; }
+
+.notification-status { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: 14px; border: 1px solid var(--color-border); background: var(--color-card); }
+.notification-status > svg { flex-shrink: 0; margin-top: 2px; }
+.notification-status.is-dirty > svg { color: var(--color-warning); }
+.notification-status.is-saved > svg, .notification-status.is-saving > svg { color: var(--color-accent); }

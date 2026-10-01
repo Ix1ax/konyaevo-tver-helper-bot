@@ -45,4 +45,23 @@ class ScheduleShareServiceTest {
         assertEquals(404,assertThrows(ResponseStatusException.class, () -> service.image("unknown")).getStatusCode().value());
         verify(http,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
     }
+    @Test void usesConfiguredHttpProxyForPreparedMessages() throws Exception {
+        var proxyServer = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        var received = new java.util.concurrent.atomic.AtomicReference<String>();
+        proxyServer.createContext("/", exchange -> {
+            received.set(new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            byte[] response = "{\"ok\":true,\"result\":{\"id\":\"proxy-message\"}}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (var out = exchange.getResponseBody()) { out.write(response); }
+        });
+        proxyServer.start();
+        try {
+            var service = new ScheduleShareService(new ObjectMapper(), "test-token", "http://telegram.invalid/bot",
+                    "https://example.test/api", "example_bot", "HTTP", "127.0.0.1", proxyServer.getAddress().getPort());
+            var result = service.prepare(123, Base64.getEncoder().encodeToString(picture(1080, "jpeg")), "Расписание");
+            assertEquals("proxy-message", result.id());
+            assertEquals(123, new ObjectMapper().readTree(received.get()).path("user_id").asLong());
+        } finally { proxyServer.stop(0); }
+    }
+
 }

@@ -15,10 +15,12 @@ import java.util.*;
 /** Temporary, unguessable image URLs used by Telegram's prepared-message API. */
 @Service
 public class ScheduleShareService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ScheduleShareService.class);
     private static final int MAX_BYTES = 650_000;
     private final Map<String, Image> images = new LinkedHashMap<>();
     private final ObjectMapper json;
     private final String token, apiBase, publicBase, username;
+    private java.net.Proxy proxy = java.net.Proxy.NO_PROXY;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     record Image(byte[] bytes, long user, long created, long expires) {}
     public record Prepared(String id, String imageUrl) {}
@@ -29,6 +31,27 @@ public class ScheduleShareService {
             @Value("${bot.username:konyaevo_tver_helper_bot}") String username) {
         this.json = json; this.token = token; this.apiBase = apiBase;
         this.publicBase = publicBase.replaceAll("/$", ""); this.username = username;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ScheduleShareService(ObjectMapper json, @Value("${bot.token}") String token,
+            @Value("${bot.base-url:https://api.telegram.org/bot}") String apiBase,
+            @Value("${share.public-api-url:https://konyaevo-api.ixlax.space/api}") String publicBase,
+            @Value("${bot.username:konyaevo_tver_helper_bot}") String username,
+            @Value("${bot.proxy.type:NO_PROXY}") String proxyType,
+            @Value("${bot.proxy.host:127.0.0.1}") String proxyHost,
+            @Value("${bot.proxy.port:10808}") int proxyPort) {
+        this(json, token, apiBase, publicBase, username);
+        if ("SOCKS5".equalsIgnoreCase(proxyType) || "SOCKS4".equalsIgnoreCase(proxyType))
+            proxy = new java.net.Proxy(java.net.Proxy.Type.SOCKS, new java.net.InetSocketAddress(proxyHost, proxyPort));
+        else if ("HTTP".equalsIgnoreCase(proxyType))
+            proxy = new java.net.Proxy(java.net.Proxy.Type.HTTP, new java.net.InetSocketAddress(proxyHost, proxyPort));
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
+    public synchronized void clearExpiredImages() {
+        long now = System.currentTimeMillis();
+        images.entrySet().removeIf(entry -> entry.getValue().expires < now);
     }
 
     static byte[] validate(String value) {
@@ -87,16 +110,39 @@ public class ScheduleShareService {
             var request = HttpRequest.newBuilder(URI.create(apiBase + token + "/savePreparedInlineMessage"))
                     .timeout(Duration.ofSeconds(8)).header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build();
-            var response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            var data = json.readTree(response.body());
+            int status;
+            String responseBody;
+            if (proxy == java.net.Proxy.NO_PROXY) {
+                var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+                status = response.statusCode(); responseBody = response.body();
+            } else {
+                // JDK HttpClient does not support SOCKS; use a per-request proxy without global JVM settings.
+                var connection = (java.net.HttpURLConnection) request.uri().toURL().openConnection(proxy);
+                try {
+                    connection.setConnectTimeout(4000); connection.setReadTimeout(8000);
+                    connection.setRequestMethod("POST"); connection.setDoOutput(true);
+                    connection.setRequestProperty("Content-Type", "application/json");
+                    try (var out = connection.getOutputStream()) { out.write(json.writeValueAsBytes(body)); }
+                    status = connection.getResponseCode();
+                    try (var in = status >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
+                        responseBody = in == null ? "{}" : new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                } finally { connection.disconnect(); }
+            }
+            var data = json.readTree(responseBody);
             String preparedId = data.path("result").path("id").asText();
-            if (response.statusCode() != 200 || !data.path("ok").asBoolean() || preparedId.isBlank())
+            if (status != 200 || !data.path("ok").asBoolean() || preparedId.isBlank()) {
+                String description = data.path("description").asText("No description").replace(token, "[redacted]").replaceAll("[\\r\\n]", " ");
+                log.warn("[SCHEDULE SHARE] Telegram rejected prepared message: HTTP {}, code {}, description {}",
+                        status, data.path("error_code").asInt(), description.substring(0, Math.min(300, description.length())));
                 throw new IllegalStateException();
+            }
             return new Prepared(preparedId, url);
         } catch (Exception e) {
             synchronized (this) { images.remove(id); }
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            // Do not include request URLs or tokens in errors/logs.
+            // Exception class identifies timeouts/network failures without logging token-bearing URLs.
+            log.warn("[SCHEDULE SHARE] Preparation failed: {}", e.getClass().getSimpleName());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Не удалось подготовить отправку в Telegram");
         }
     }

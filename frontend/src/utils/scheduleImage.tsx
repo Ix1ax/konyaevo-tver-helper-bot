@@ -23,8 +23,10 @@ export function scheduleCaption(options: ScheduleImageOptions): string {
   return `Ваше расписание на ${options.date} (${options.day.toLowerCase()})\n${options.role === 'teacher' ? 'Преподаватель' : 'Группа'}: ${options.target}${options.baseSchedule ? '\nОсновное расписание без замен и отмен.' : ''}\n\nРасписание Коняево — @${BOT_HANDLE}\n${BOT_LINK}`;
 }
 
+let embeddedFonts: Promise<string> | undefined;
+
 /** Uses the same React cards and CSS as the application; only navigation is omitted. */
-export async function renderScheduleImage(options: ScheduleImageOptions, format: 'image/png' | 'image/jpeg' = 'image/png'): Promise<Blob> {
+export async function renderScheduleImages(options: ScheduleImageOptions, includeJpeg = false): Promise<{png: Blob; jpeg: Blob}> {
   await Promise.all([document.fonts.load('900 20px Unbounded', 'Коняево'), document.fonts.load('700 16px "Plus Jakarta Sans"', 'Расписание')]);
   await document.fonts.ready;
   const { toCanvas, getFontEmbedCSS } = await import('html-to-image');
@@ -52,9 +54,18 @@ export async function renderScheduleImage(options: ScheduleImageOptions, format:
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     const element = host.firstElementChild as HTMLElement;
     // Browser-native SVG rendering preserves font baselines and icon alignment.
-    const fontEmbedCSS = await getFontEmbedCSS(element);
+    // Reuse embedded fonts across exports, but allow retry after a network failure.
+    if (!embeddedFonts) embeddedFonts = getFontEmbedCSS(element).catch(error => { embeddedFonts = undefined; throw error; });
+    const fontEmbedCSS = await embeddedFonts;
     const canvas = await toCanvas(element, { pixelRatio:1080 / 390, backgroundColor: options.isLight ? '#f8fafc' : '#090a0b',
       width:390, fontEmbedCSS });
-    return await new Promise<Blob>((resolve,reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Не удалось сохранить картинку')), format, 0.9));
+    const encode = (format: 'image/png' | 'image/jpeg') => new Promise<Blob>((resolve,reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Не удалось сохранить картинку')), format, 0.9));
+    const [png, jpeg] = await Promise.all([encode('image/png'), includeJpeg ? encode('image/jpeg') : Promise.resolve(null)]);
+    return {png, jpeg:jpeg || png};
   } finally { root.unmount(); host.remove(); }
+}
+
+export async function renderScheduleImage(options: ScheduleImageOptions, format: 'image/png' | 'image/jpeg' = 'image/png'): Promise<Blob> {
+  const images = await renderScheduleImages(options, format === 'image/jpeg');
+  return format === 'image/jpeg' ? images.jpeg : images.png;
 }

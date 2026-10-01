@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Share2, Download, X } from 'lucide-react';
+import { LoadingIndicator } from './Ui';
 import { signedRequest } from '../api/client';
-import { scheduleCaption, renderScheduleImage, type ScheduleImageOptions } from '../utils/scheduleImage';
+import { scheduleCaption, renderScheduleImages, type ScheduleImageOptions } from '../utils/scheduleImage';
 
 export function ShareSchedule({ options: baseOptions, disabled = false, fullWidth = false, choices }: { options: ScheduleImageOptions; disabled?: boolean; fullWidth?: boolean; choices?: {label: string; options: ScheduleImageOptions}[] }) {
   const [choice, setChoice] = useState(0);
-  const options = choices?.[choice]?.options || baseOptions;
+  // Parent renders recreate option objects; only changed export data should regenerate the image.
+  const optionsKey = JSON.stringify(choices?.[choice]?.options || baseOptions);
+  const options = useMemo<ScheduleImageOptions>(() => JSON.parse(optionsKey), [optionsKey]);
   const [open, setOpen] = useState(false);
   const [image, setImage] = useState<{ url: string; file: File; upload: Blob; canShare: boolean } | null>(null);
   const [error, setError] = useState('');
@@ -21,17 +24,16 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
     let active = true;
     let url = '';
     setImage(null); setPrepared(null); setError('');
-    renderScheduleImage(options).then(async blob => {
+    renderScheduleImages(options, telegramShare).then(({png:blob, jpeg:upload}) => {
       if (!active) return;
       url = URL.createObjectURL(blob);
       const file = new File([blob], 'konyaevo-schedule.png', { type: 'image/png' });
       let canShare = false;
       try { canShare = Boolean(typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })); } catch { /* Download remains available. */ }
-      const upload = telegramShare ? await renderScheduleImage(options, 'image/jpeg') : blob;
       if (active) setImage({ url, file, upload, canShare });
     }).catch(() => { if (active) setError('Не удалось подготовить картинку. Закройте окно и попробуйте ещё раз.'); });
     return () => { active = false; if (url) URL.revokeObjectURL(url); };
-  }, [open, options]);
+  }, [open, options, telegramShare]);
   useEffect(() => {
     if (!open) return;
     const overflow = document.body.style.overflow;
@@ -67,7 +69,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
     if (telegramShare && typeof tg.downloadFile === 'function') {
       setBusy(true); setError('');
       try { const message = await prepare(); tg.downloadFile({ url: message.imageUrl, file_name: 'konyaevo-schedule.jpg' }); }
-      catch { setError('Не удалось сохранить через Telegram. Попробуйте ещё раз.'); }
+      catch (error) { setError(error instanceof Error ? error.message : 'Не удалось сохранить через Telegram. Попробуйте ещё раз.'); }
       finally { setBusy(false); }
       return;
     }
@@ -84,7 +86,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
       } else await navigator.share({ files: [image.file], title: `Коняево · ${options.target}`, text: scheduleCaption(options) });
     }
     catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) setError('Отправка недоступна. Сохраните картинку и прикрепите её в Telegram.');
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setError(error instanceof Error ? error.message : 'Отправка недоступна. Сохраните картинку и прикрепите её в Telegram.');
     } finally { setBusy(false); }
   };
   return <>
@@ -93,7 +95,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
       <section role="dialog" aria-modal="true" aria-labelledby="share-title" className="share-dialog surface">
         <div className="flex items-center justify-between gap-3 mb-3"><h2 id="share-title" className="font-semibold">Поделиться расписанием</h2><button ref={close} type="button" className="icon-button" onClick={() => setOpen(false)} aria-label="Закрыть"><X /></button></div>
         {choices && <div className="grid grid-cols-2 gap-2 mb-3">{choices.map((item,index)=><button type="button" key={item.label} className="choice" aria-pressed={choice === index} disabled={busy} onClick={()=>setChoice(index)}>{item.label}</button>)}</div>}
-        <div className="share-preview">{image ? <img src={image.url} alt={`Расписание: ${options.target}, ${options.day}, ${options.date}`} /> : !error && <p role="status" className="p-8 text-center text-theme-subtext">Готовим картинку…</p>}</div>
+        <div className="share-preview">{image ? <img src={image.url} alt={`Расписание: ${options.target}, ${options.day}, ${options.date}`} /> : !error && <LoadingIndicator compact label="Готовим картинку" />}</div>
         {error && <p role="alert" className="notice error-notice my-3">{error}</p>}
         {image && <div className="mt-4 space-y-2">
           <p className="text-xs text-theme-subtext whitespace-pre-line p-3 surface rounded-xl">{scheduleCaption(options)}</p>

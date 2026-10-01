@@ -164,7 +164,7 @@ export function LessonCardContent({ lesson, highlightCurrent = false, role = 'st
           </span>
         )}
         {lesson.groupName && (
-          <span className={`px-2.5 py-1 rounded-xl flex items-center gap-1.5 ${
+          <span data-meta="group" style={{whiteSpace:'nowrap', flexShrink:0, width:'max-content'}} className={`px-2.5 py-1 rounded-xl flex items-center gap-1.5 ${
             currentThemeDef?.isLight
               ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
               : 'bg-white/[0.06] text-indigo-300 border border-white/10'
