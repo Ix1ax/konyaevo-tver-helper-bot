@@ -14,7 +14,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
   const [image, setImage] = useState<{ url: string; file: File; upload: Blob; canShare: boolean } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [prepared, setPrepared] = useState<{ id: string; imageUrl: string } | null>(null);
+  const [prepared, setPrepared] = useState<{ id: string; imageUrl: string; expiresAt?: number } | null>(null);
   const tg = window.Telegram?.WebApp;
   const telegramShare = Boolean(tg?.initData && tg?.isVersionAtLeast?.('8.0') && typeof tg?.shareMessage === 'function');
   const diagnosticImage = useRef('');
@@ -60,7 +60,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', onKey); trigger.current?.focus(); };
   }, [open]);
   const prepare = async () => {
-    if (prepared) return prepared;
+    if (prepared && (!prepared.expiresAt || prepared.expiresAt > Date.now() + 30000)) return prepared;
     if (!image || image.upload.size > 650000) throw new Error('Картинка слишком большая');
     const jpeg = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -68,7 +68,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
       reader.onerror = () => reject(new Error('Не удалось прочитать картинку'));
       reader.readAsDataURL(image.upload);
     });
-    const message = await signedRequest<{ id: string; imageUrl: string }>('/share/prepare', { jpeg, caption: scheduleCaption(options) });
+    const message = await signedRequest<{ id: string; imageUrl: string; expiresAt?: number }>('/share/prepare', { jpeg, caption: scheduleCaption(options) });
     diagnosticImage.current = message.imageUrl.split("/").pop()?.replace(/\.jpg$/, "") || "";
     setPrepared(message);
     return message;

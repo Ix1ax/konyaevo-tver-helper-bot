@@ -45,7 +45,7 @@ export async function signedRequest<T>(path: string, body?: unknown): Promise<T>
   const initData = window.Telegram?.WebApp?.initData;
   if (!initData) throw new Error('Откройте приложение через Telegram.');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), path === '/share/prepare' ? 40000 : 10000);
   try {
     const response = await fetch(`${getApiBaseUrl()}${path}`, {
       method: body === undefined ? 'GET' : 'POST', signal: controller.signal, cache: 'no-store',

@@ -59,6 +59,31 @@ class ScheduleShareServiceTest {
         assertEquals(404,assertThrows(ResponseStatusException.class, () -> service.image("unknown")).getStatusCode().value());
         verify(http,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
     }
+    @SuppressWarnings("unchecked")
+    @Test void usesExternalImageUrlWithoutCachingJpegAndExpiresUploadOnTelegramFailure() throws Exception {
+        var service = new ScheduleShareService(new ObjectMapper(), "test-token", "https://api.telegram.org/bot", "https://example.test/api", "example_bot");
+        var storage = mock(ImageKitStorage.class);
+        when(storage.enabled()).thenReturn(true);
+        long expiry = System.currentTimeMillis() + 1_800_000;
+        when(storage.upload(any(byte[].class), anyString())).thenReturn(new ImageKitStorage.Uploaded("remote-id", "https://ik.imagekit.io/test/image.jpg", expiry));
+        ReflectionTestUtils.setField(service, "storage", storage);
+        var http = mock(HttpClient.class);
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("{\"ok\":true,\"result\":{\"id\":\"external-prepared\"}}");
+        when(http.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        ReflectionTestUtils.setField(service, "http", http);
+        String jpeg = Base64.getEncoder().encodeToString(picture(1080, "jpeg"));
+        var prepared = service.prepare(123, jpeg, "Расписание");
+        assertEquals("https://ik.imagekit.io/test/image.jpg", prepared.imageUrl());
+        assertEquals(expiry, prepared.expiresAt());
+        var images = (java.util.Map<String, ScheduleShareService.Image>) ReflectionTestUtils.getField(service, "images");
+        assertEquals(0, images.values().iterator().next().bytes().length);
+        when(response.statusCode()).thenReturn(400);
+        when(response.body()).thenReturn("{\"ok\":false,\"description\":\"test failure\"}");
+        assertEquals(502, assertThrows(ResponseStatusException.class, () -> service.prepare(456, jpeg, "Расписание")).getStatusCode().value());
+        verify(storage).expireNow("remote-id");
+    }
     @Test void usesConfiguredHttpProxyForPreparedMessages() throws Exception {
         var proxyServer = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
         var received = new java.util.concurrent.atomic.AtomicReference<String>();

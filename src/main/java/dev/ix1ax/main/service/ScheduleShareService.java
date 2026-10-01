@@ -25,7 +25,9 @@ public class ScheduleShareService {
     private java.net.Proxy proxy = java.net.Proxy.NO_PROXY;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     record Image(byte[] bytes, long user, long created, long expires) {}
-    public record Prepared(String id, String imageUrl) {}
+    @org.springframework.beans.factory.annotation.Autowired
+    private ImageKitStorage storage;
+    public record Prepared(String id, String imageUrl, long expiresAt) {}
 
     public ScheduleShareService(ObjectMapper json, @Value("${bot.token}") String token,
             @Value("${bot.base-url:https://api.telegram.org/bot}") String apiBase,
@@ -93,7 +95,7 @@ public class ScheduleShareService {
 
     public synchronized byte[] image(String id) {
         Image image = images.get(id);
-        if (image == null || image.expires < System.currentTimeMillis()) {
+        if (image == null || image.bytes.length == 0 || image.expires < System.currentTimeMillis()) {
             images.remove(id); throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
         return image.bytes;
@@ -103,10 +105,22 @@ public class ScheduleShareService {
         if (caption == null || caption.length() > 900) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректная подпись");
         long started = System.nanoTime();
         byte[] bytes = validate(encoded);
-        String id = store(user, bytes);
+        String id = store(user, storage != null && storage.enabled() ? new byte[0] : bytes);
         String url = publicBase + "/share/images/" + id + ".jpg";
-        log.info("[SCHEDULE SHARE] prepare user={} image={} bytes={} photoUrl={} proxy={}", user, id, bytes.length, url, proxy.type());
         String botLink = "https://t.me/" + username;
+        ImageKitStorage.Uploaded uploaded = null;
+        try {
+            if (storage != null && storage.enabled()) {
+                uploaded = storage.upload(bytes, id);
+                url = uploaded.url();
+            }
+        } catch (Exception e) {
+            synchronized (this) { images.remove(id); }
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            log.warn("[SCHEDULE SHARE] ImageKit preparation failed image={} error={}", id, e.getClass().getSimpleName());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Не удалось загрузить картинку для Telegram");
+        }
+        log.info("[SCHEDULE SHARE] prepare user={} image={} bytes={} photoUrl={} proxy={}", user, id, bytes.length, url, proxy.type());
         var result = Map.of("type", "photo", "id", id, "photo_url", url, "thumbnail_url", url,
                 "caption", caption,
                 "reply_markup", Map.of("inline_keyboard", List.of(List.of(Map.of("text", "Открыть расписание", "url", botLink + "?startapp")))));
@@ -145,9 +159,16 @@ public class ScheduleShareService {
             }
             log.info("[SCHEDULE SHARE] prepared image={} http={} elapsedMs={} expires={}", id, status,
                     (System.nanoTime() - started) / 1_000_000, data.path("result").path("expiration_date").asLong());
-            return new Prepared(preparedId, url);
+            long expiresAt = uploaded == null ? System.currentTimeMillis() + Duration.ofMinutes(30).toMillis() : uploaded.expiresAt();
+            long telegramExpiry = data.path("result").path("expiration_date").asLong() * 1000;
+            if (telegramExpiry > 0) expiresAt = Math.min(expiresAt, telegramExpiry);
+            return new Prepared(preparedId, url, expiresAt);
         } catch (Exception e) {
             synchronized (this) { images.remove(id); }
+            if (uploaded != null) {
+                try { storage.expireNow(uploaded.fileId()); }
+                catch (RuntimeException ignored) { /* Original expiration remains persisted for cleanup. */ }
+            }
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             // Exception class identifies timeouts/network failures without logging token-bearing URLs.
             log.warn("[SCHEDULE SHARE] Preparation failed image={}: {}", id, e.getClass().getSimpleName());
