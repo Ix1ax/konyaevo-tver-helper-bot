@@ -55,6 +55,8 @@ public class ProfileApiController {
         String role = update.role() == null ? user.getRole() : update.role();
         String group = update.group() == null ? user.getGroupName() : update.group();
         String teacher = update.teacher() == null ? user.getTeacherName() : update.teacher();
+        if ("teacher".equals(role)) group = null;
+        else teacher = null;
         boolean changes = update.changes() == null ? Boolean.TRUE.equals(user.getNotifyEnabled()) : update.changes();
         boolean tomorrow = update.tomorrow() == null ? Boolean.TRUE.equals(user.getNotifyTomorrow()) : update.tomorrow();
         if ((changes || tomorrow) && !("student".equals(role) && group != null && !group.isBlank()) &&

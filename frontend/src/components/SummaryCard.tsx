@@ -3,11 +3,16 @@ import { useTheme } from '../context/ThemeContext';
 
 export function SummaryCard({ lessons }: { lessons: Lesson[]; dayName?: string }) {
   const { currentThemeDef } = useTheme();
+  return <SummaryCardContent lessons={lessons} isLight={currentThemeDef.isLight} />;
+}
+
+export function SummaryCardContent({ lessons, isLight = false }: { lessons: Lesson[]; isLight?: boolean }) {
+  const currentThemeDef = { isLight };
   const active = lessons.filter((lesson) => !lesson.canceled);
   if (!active.length) return null;
 
-  const start = active[0].time.split('-')[0].trim();
-  const last = active[active.length - 1].time.split('-');
+  const start = active[0].time.split(/[-–—]/)[0].trim();
+  const last = active[active.length - 1].time.split(/[-–—]/);
   const end = last[last.length - 1].trim();
   const count = new Set(active.map((lesson) => lesson.lessonNumber)).size;
 

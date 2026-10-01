@@ -27,8 +27,8 @@ export function App() {
   const needsProfile = ['today', 'tomorrow', 'week'].includes(activeTab);
   const selected = role === 'student' ? selectedGroup : selectedTeacher;
 
-  return <div className={`app-shell min-h-screen text-theme-text ${isAdmin ? 'has-admin-navigation' : ''}`}>
-    <main className={`max-w-lg mx-auto min-h-screen ${isAdmin ? 'pb-14' : ''}`}>
+  return <div className={`app-shell min-h-screen text-theme-text has-share-navigation ${isAdmin ? 'has-admin-navigation' : ''}`}>
+    <main className={`max-w-lg mx-auto min-h-screen ${isAdmin ? 'pb-28' : 'pb-14'}`}>
       {refreshing && <LoadingIndicator compact label="Обновляем расписание…" />}
       {loadError && <p role="alert" className="notice error-notice m-5">{loadError}</p>}
       {loading ? <LoadingIndicator /> : needsProfile && (loadError || !selected)

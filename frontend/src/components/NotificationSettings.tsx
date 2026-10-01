@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Bell, Moon } from 'lucide-react';
 import { profileRequest, SavedProfile } from '../api/client';
+import { TimePicker } from './TimePicker';
 import { useApp } from '../context/AppContext';
 
 export function NotificationSettings() {
@@ -38,10 +39,9 @@ export function NotificationSettings() {
           <span className={`text-xs font-semibold shrink-0 ${settings[item.key] ? 'text-theme-accent' : 'text-theme-subtext'}`}>{settings[item.key] ? 'ВКЛ' : 'ВЫКЛ'}</span>
         </button>)}
         <div className="p-4 space-y-3">
-          <label className="block text-xs text-theme-subtext">Время отправки · Москва
-            <input className="field mt-2" type="time" value={settings.time} disabled={saving}
-              onChange={e => { setSaved(false); setSettings({ ...settings, time: e.target.value }); }} />
-          </label>
+          <div className="block text-xs text-theme-subtext">Время отправки · Москва
+            <TimePicker value={settings.time} disabled={saving} onChange={time => { setSaved(false); setSettings({ ...settings, time }); }} />
+          </div>
           <div className="flex gap-1 flex-wrap" aria-label="Дни отправки">
             {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((day, i) => <button type="button" key={day}
               className="choice text-xs" disabled={saving} aria-pressed={settings.days.includes(i + 1)}

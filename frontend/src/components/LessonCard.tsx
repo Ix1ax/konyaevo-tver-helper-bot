@@ -18,14 +18,19 @@ import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 
 export function LessonCard({ lesson, highlightCurrent = false }: { lesson: Lesson; highlightCurrent?: boolean }) {
-  const { role, setSelectedTeacher, setActiveTab } = useApp();
+  const { role, setPreviewTeacher, setActiveTab } = useApp();
   const { currentThemeDef } = useTheme();
 
-  const openTeacher = () => {
-    if (!lesson.teacher || role !== 'student') return;
-    setSelectedTeacher(lesson.teacher);
-    setActiveTab('teachers');
-  };
+  return <LessonCardContent lesson={lesson} highlightCurrent={highlightCurrent} role={role}
+    isLight={currentThemeDef.isLight} onTeacher={teacher => { setPreviewTeacher(teacher); setActiveTab('teachers'); }} />;
+}
+
+/** Shared presentation for the screen and exported image. */
+export function LessonCardContent({ lesson, highlightCurrent = false, role = 'student', isLight = false, onTeacher = () => {} }: {
+  lesson: Lesson; highlightCurrent?: boolean; role?: string; isLight?: boolean; onTeacher?: (teacher: string) => void;
+}) {
+  const currentThemeDef = { isLight };
+  const openTeacher = () => { if (lesson.teacher && role === 'student') onTeacher(lesson.teacher); };
 
   const [minute, setMinute] = React.useState(() => Math.floor(Date.now() / 60000));
   React.useEffect(() => {
@@ -84,7 +89,8 @@ export function LessonCard({ lesson, highlightCurrent = false }: { lesson: Lesso
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Clock size={16} className={isOngoing ? 'text-blue-500' : 'text-theme-subtext opacity-60'} />
-          <span className={`text-xl font-black font-unbounded tracking-tight text-theme-text ${lesson.canceled ? 'line-through opacity-50' : ''}`}>
+          <span style={{ whiteSpace: 'nowrap', display: 'inline-block' }}
+            className={`lesson-time text-xl font-black font-unbounded tracking-tight text-theme-text ${lesson.canceled ? 'line-through opacity-50' : ''}`}>
             {lesson.time}
           </span>
         </div>
@@ -124,16 +130,17 @@ export function LessonCard({ lesson, highlightCurrent = false }: { lesson: Lesso
           <p className="text-theme-subtext mb-2">{subgroup.number}-я подгруппа</p>
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" disabled={role !== 'student'} className="inline-flex items-center gap-1.5 text-left"
-              onClick={() => { setSelectedTeacher(subgroup.teacher); setActiveTab('teachers'); }}>
+              onClick={() => { onTeacher(subgroup.teacher); }}>
               <UserRound size={13} />{subgroup.teacher}
             </button>
             <span className="inline-flex items-center gap-1.5 font-semibold"><MapPin size={13} />{subgroup.room}</span>
           </div>
         </div>)}
       </div>}
-      <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
+      <div className="lesson-metadata flex flex-wrap items-center gap-1.5 text-xs font-medium">
         {!lesson.subgroups?.length && lesson.teacher && (
           <button
+            data-meta="teacher"
             onClick={openTeacher}
             disabled={role !== 'student'}
             className={`px-2.5 py-1 rounded-xl flex items-center gap-1.5 transition active:scale-95 ${

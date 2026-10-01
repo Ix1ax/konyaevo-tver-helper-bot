@@ -37,7 +37,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('theme-light', currentThemeDef.isLight);
     document.documentElement.classList.toggle('theme-dark', !currentThemeDef.isLight);
     document.documentElement.style.colorScheme = currentThemeDef.isLight ? 'light' : 'dark';
-    document.body.style.backgroundColor = currentThemeDef.isLight ? '#f5f6f8' : '#090a0b';
+    const background = currentThemeDef.isLight ? '#f8fafc' : '#090a0b';
+    document.documentElement.style.backgroundColor = background;
+    document.body.style.backgroundColor = background;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', background);
+    const tg = window.Telegram?.WebApp;
+    const applyColor = (method: string, version: string) => {
+      try {
+        if (tg?.isVersionAtLeast?.(version)) tg[method]?.(background);
+      } catch {
+        // Старые клиенты могут не поддерживать окрашивание оболочки.
+      }
+    };
+    applyColor('setBackgroundColor', '6.1');
+    applyColor('setHeaderColor', '6.9');
+    applyColor('setBottomBarColor', '7.10');
     document.body.style.color = currentThemeDef.isLight ? '#18202c' : '#eef0f4';
   }, [currentThemeDef]);
 

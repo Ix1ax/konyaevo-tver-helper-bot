@@ -26,6 +26,8 @@
   --color-red: #ae354d;
   --color-warning: #875707;
 }
+html, body, #root { min-height: 100%; background-color: var(--color-bg); }
+html, body { overscroll-behavior-y: none; }
 body {
   margin: 0;
   background: var(--color-bg);
@@ -79,15 +81,15 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* Нейтральные блики сохраняют стеклянный эффект без синего оттенка в тёмной теме. */
-.app-shell { isolation: isolate; position: relative; }
-.app-shell::before {
-  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+.app-shell {
+  position: relative;
+  min-height: 100dvh;
   background:
     radial-gradient(ellipse at 4% 12%, rgba(180, 180, 180, .10), transparent 48%),
     radial-gradient(ellipse at 98% 42%, rgba(130, 130, 130, .07), transparent 45%),
     radial-gradient(ellipse at 25% 90%, rgba(155, 155, 155, .06), transparent 45%), var(--color-bg);
 }
-.theme-light .app-shell::before {
+.theme-light .app-shell {
   background:
     radial-gradient(ellipse at 4% 12%, rgba(111, 172, 242, .4), transparent 48%),
     radial-gradient(ellipse at 98% 42%, rgba(193, 157, 229, .3), transparent 45%),
@@ -119,9 +121,8 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 
 .feedback-popup { position: fixed; z-index: 60; bottom: max(88px, calc(env(safe-area-inset-bottom) + 76px)); left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 24px)); max-height: calc(85dvh - 88px); overflow-y: auto; padding: 20px; border-radius: 24px; color: var(--color-text); }
 
-/* Карточки вне экрана не требуют отрисовки размытия; размеры сохраняют плавную прокрутку. */
-.glass-card { content-visibility: auto; contain-intrinsic-size: auto 220px; }
-.room-results > * { content-visibility: auto; contain-intrinsic-size: auto 100px; }
+/* Стеклянные карточки рисуются непрерывно: content-visibility вместе
+   с backdrop-filter может оставлять светлые области в Android WebView. */
 
 /* В профиле заголовки и границы собирают настройки в отдельные секции. */
 .profile-settings .section-label {
@@ -222,3 +223,24 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .course-option { min-width: 0; min-height: 42px; padding: 8px 4px; border-radius: 10px; color: var(--color-subtext); font-size: 12px; font-weight: 600; transition: background-color .15s, color .15s; }
 .course-option[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .course-option:hover:not([aria-pressed="true"]):not(:disabled) { background: var(--color-card-hover); color: var(--color-text); }
+
+.share-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .7); }
+.share-dialog { width: min(460px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 20px; border-radius: 24px; background: var(--color-card); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.share-preview { border-radius: 16px; overflow: hidden; background: #0c0d10; }
+.share-preview img { display: block; width: 100%; height: auto; }
+@media (max-width: 390px) { .share-overlay { padding: 12px; } .share-dialog { padding: 16px; } }
+
+/* SVG export preserves the screen layout; backdrop blur has no raster backdrop. */
+[data-export="schedule"] .glass-card, [data-export="schedule"] .surface { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+.schedule-identity { min-width: 0; flex: 0 1 auto; width: fit-content; max-width: 180px; padding: 9px 12px; border-radius: 14px; border: 1px solid var(--color-border); background: var(--color-card); text-align: right; }
+.schedule-identity-label { font-family: 'Unbounded', sans-serif; font-weight: 400; font-size: 10px; line-height: 14px; color: var(--color-subtext); margin-bottom: 3px; }
+.schedule-identity-name { font-family: 'Unbounded', sans-serif; font-size: 13px; line-height: 18px; font-weight: 700; color: var(--color-text); overflow-wrap: anywhere; }
+
+.time-dialog { max-width: 360px; }
+.theme-light .time-dialog { background: var(--color-card); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.time-options { height: 190px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--color-border); border-radius: 16px; padding: 6px; background: var(--color-bg); }
+.time-option { display: block; width: 100%; min-height: 40px; border-radius: 10px; font-size: 18px; font-weight: 600; color: var(--color-subtext); }
+.time-option[aria-pressed="true"] { color: #fff; background: var(--color-accent); }
+.has-share-navigation .feedback-popup { bottom: max(144px, calc(env(safe-area-inset-bottom) + 132px)); max-height: calc(85dvh - 144px); }
+.has-share-navigation.has-admin-navigation .feedback-popup { bottom: max(200px, calc(env(safe-area-inset-bottom) + 188px)); max-height: calc(85dvh - 200px); }

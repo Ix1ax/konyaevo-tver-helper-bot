@@ -8,7 +8,7 @@ process.on('exit', () => fs.rmSync(output, { recursive: true, force: true }));
 execFileSync(process.execPath, [require.resolve('typescript/bin/tsc'),
   path.join(__dirname, '../src/utils/calendar.ts'), path.join(__dirname, '../src/utils/requestCache.ts'),
   '--target', 'ES2020', '--module', 'commonjs', '--outDir', output, '--skipLibCheck'], { stdio: 'inherit' });
-const { selectedWeekDate } = require(path.join(output, 'calendar.js'));
+const { selectedWeekDate, moscowDayDate } = require(path.join(output, 'calendar.js'));
 const { RequestCache } = require(path.join(output, 'requestCache.js'));
 
 async function main() {
@@ -18,6 +18,10 @@ async function main() {
   assert.equal(selectedWeekDate('Пятница', '2027-01-01T00:15:00+03:00'), '01.01.2027');
   assert.equal(selectedWeekDate('Суббота', '2027-01-01T00:15:00+03:00'), '02.01.2027');
   assert.equal(selectedWeekDate('Другой день', '2026-09-30T12:00:00+03:00'), '');
+  assert.equal(selectedWeekDate('Понедельник', '2026-09-30T12:00:00+03:00', 1), '05.10.2026');
+  assert.equal(moscowDayDate('2026-09-30T22:30:00Z'), '01.10.2026');
+  assert.equal(moscowDayDate('2026-12-31T20:00:00Z', 1), '01.01.2027');
+  assert.equal(moscowDayDate('2026-10-04T12:00:00+03:00', 1), '05.10.2026');
   let now = 0, calls = 0;
   const cache = new RequestCache(() => now);
   const fetch = async () => ++calls;

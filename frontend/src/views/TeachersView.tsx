@@ -10,11 +10,11 @@ import type { ScheduleMap } from '../types';
 
 const DAYS = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'];
 export function TeachersView() {
-  const { teachersData, selectedTeacher, setSelectedTeacher, setRole, role, setActiveTab, info } = useApp();
+  const { teachersData, previewTeacher, selectedTeacher, setSelectedTeacher, role, setActiveTab, info } = useApp();
   const [selecting, setSelecting] = useState(false);
   const [query, setQuery] = useState('');
   const [letter, setLetter] = useState('');
-  const [teacher, setTeacher] = useState<string | null>(selectedTeacher || null);
+  const [teacher, setTeacher] = useState<string | null>(previewTeacher || selectedTeacher || null);
   const [schedule, setSchedule] = useState<ScheduleMap>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +36,7 @@ export function TeachersView() {
     setSelecting(true); setError('');
     try {
       if (window.Telegram?.WebApp?.initData) await profileRequest({ role: 'teacher', teacher });
-      setSelectedTeacher(teacher); setRole('teacher'); setActiveTab('today');
+      setSelectedTeacher(teacher); setActiveTab('today');
     } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось сохранить расписание.'); }
     finally { setSelecting(false); }
   }

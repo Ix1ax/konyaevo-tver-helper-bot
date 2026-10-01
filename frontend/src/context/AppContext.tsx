@@ -16,6 +16,8 @@ interface AppContextType {
   setRole: (role: UserRole) => void;
   selectedGroup: string;
   setSelectedGroup: (group: string) => void;
+  previewTeacher: string;
+  setPreviewTeacher: (teacher: string) => void;
   selectedTeacher: string;
   setSelectedTeacher: (teacher: string) => void;
   activeTab: ActiveTab;
@@ -42,13 +44,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [selectedGroup, setSelectedGroupState] = useState<string>(() => {
-    return localStorage.getItem('konyaevo_group') || '';
+    return localStorage.getItem('konyaevo_role') === 'teacher' ? '' : localStorage.getItem('konyaevo_group') || '';
   });
 
   const [selectedTeacher, setSelectedTeacherState] = useState<string>(() => {
-    return localStorage.getItem('konyaevo_teacher') || '';
+    return localStorage.getItem('konyaevo_role') === 'teacher' ? localStorage.getItem('konyaevo_teacher') || '' : '';
   });
 
+  const [previewTeacher, setPreviewTeacher] = useState('');
+  useEffect(() => { localStorage.removeItem(role === 'student' ? 'konyaevo_teacher' : 'konyaevo_group'); }, [role]);
   const [activeTab, setActiveTabState] = useState<ActiveTab>('today');
   const [info, setInfo] = useState<InfoResponse>({weekBadge: '', isRedWeek: false, todayName: '', tomorrowName: '', changesDate: '', serverTime: ''});
   const [groupsData, setGroupsData] = useState<GroupsResponse>({courses: [], groupsByCourse: {}});
@@ -69,9 +73,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 300000);
     profileRequest().then(saved => {
       if (profileEdited.current) return;
-      if (saved.role) { setRoleState(saved.role); localStorage.setItem('konyaevo_role', saved.role); }
-      if (saved.group) { setSelectedGroupState(saved.group); localStorage.setItem('konyaevo_group', saved.group); }
-      if (saved.teacher) { setSelectedTeacherState(saved.teacher); localStorage.setItem('konyaevo_teacher', saved.teacher); }
+      const restoredRole = saved.role === 'teacher' ? 'teacher' : 'student';
+      const group = restoredRole === 'student' ? saved.group || '' : '';
+      const teacher = restoredRole === 'teacher' ? saved.teacher || '' : '';
+      if (restoredRole !== role || group !== selectedGroup || teacher !== selectedTeacher) {
+        requestVersion.current++; setSchedule({});
+      }
+      setRoleState(restoredRole); setSelectedGroupState(group); setSelectedTeacherState(teacher);
+      localStorage.setItem('konyaevo_role', restoredRole);
+      localStorage.setItem('konyaevo_group', group); localStorage.setItem('konyaevo_teacher', teacher);
     }).catch(() => { /* Локальное расписание остаётся доступным при ошибке синхронизации. */ });
     return () => clearInterval(heartbeat);
   }, []);
@@ -82,6 +92,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setRole = (newRole: UserRole) => {
     profileEdited.current = true;
+    if (newRole === role) return;
+    requestVersion.current++;
+    setSchedule({}); setPreviewTeacher('');
+    if (newRole === 'teacher') { setSelectedGroupState(''); localStorage.removeItem('konyaevo_group'); }
+    else { setSelectedTeacherState(''); localStorage.removeItem('konyaevo_teacher'); }
     setRoleState(newRole);
     localStorage.setItem('konyaevo_role', newRole);
     haptic.selection();
@@ -89,6 +104,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setSelectedGroup = (group: string) => {
     profileEdited.current = true;
+    if (group === selectedGroup && role === 'student') return;
+    requestVersion.current++; setSchedule({});
+    if (group) {
+      setRoleState('student'); localStorage.setItem('konyaevo_role', 'student');
+      setSelectedTeacherState(''); localStorage.removeItem('konyaevo_teacher'); setPreviewTeacher('');
+    }
     setSelectedGroupState(group);
     localStorage.setItem('konyaevo_group', group);
     haptic.selection();
@@ -96,6 +117,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setSelectedTeacher = (teacher: string) => {
     profileEdited.current = true;
+    if (teacher === selectedTeacher && role === 'teacher') return;
+    requestVersion.current++; setSchedule({});
+    if (teacher) {
+      setRoleState('teacher'); localStorage.setItem('konyaevo_role', 'teacher');
+      setSelectedGroupState(''); localStorage.removeItem('konyaevo_group'); setPreviewTeacher('');
+    }
     setSelectedTeacherState(teacher);
     localStorage.setItem('konyaevo_teacher', teacher);
     haptic.selection();
@@ -181,6 +208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRole,
         selectedGroup,
         setSelectedGroup,
+        previewTeacher, setPreviewTeacher,
         selectedTeacher,
         setSelectedTeacher,
         activeTab,
