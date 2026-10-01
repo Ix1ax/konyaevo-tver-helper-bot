@@ -226,6 +226,10 @@ public class ScheduleParserService {
             }
 
             for (int g = 0; g < groupNames.size(); g++) {
+                // The bell columns apply even when this group has no subject in this slot.
+                scheduleMap.get(groupNames.get(g))
+                        .computeIfAbsent(currentDay, DaySchedule::new)
+                        .setSlotTime(lessonNum, time);
                 int subjectCol = groupColumns.get(g);
                 int roomCol = subjectCol + 1;
 

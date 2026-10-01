@@ -11,6 +11,11 @@ public class DaySchedule {
 
     private String dayName;
     private List<Lesson> lessons;
+    // Bell times include empty lesson slots and are published with the same schedule snapshot.
+    private final java.util.Map<Integer, String> slotTimes = new java.util.HashMap<>();
+
+    public void setSlotTime(int slot, String time) { slotTimes.put(slot, time); }
+    public String getSlotTime(int slot) { return slotTimes.get(slot); }
 
     public DaySchedule() {
         this.lessons = new ArrayList<>();

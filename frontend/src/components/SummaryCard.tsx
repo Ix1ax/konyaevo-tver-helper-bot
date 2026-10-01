@@ -25,13 +25,13 @@ export function SummaryCardContent({ lessons, isLight = false }: { lessons: Less
       }`}
     >
       {[
-        { label: 'Начнёте в', value: start },
-        { label: 'Закончите в', value: end },
+        { label: 'Начнёте в', value: /^\d{1,2}:\d{2}$/.test(start) ? start : 'Уточняется' },
+        { label: 'Закончите в', value: /^\d{1,2}:\d{2}$/.test(end) ? end : 'Уточняется' },
         { label: 'Всего пар', value: String(count) },
       ].map((item, index) => (
         <div key={item.label} className={`min-w-0 px-1 flex flex-col items-center gap-1.5 ${index ? 'border-l border-theme-border' : ''}`}>
           <span className="text-[11px] font-medium leading-tight whitespace-nowrap">{item.label}</span>
-          <span className="font-bold font-unbounded text-theme-text text-sm sm:text-base leading-tight whitespace-nowrap tabular-nums">{item.value}</span>
+          <span className={`font-bold font-unbounded text-theme-text ${item.value === 'Уточняется' ? 'text-[10px] sm:text-xs' : 'text-sm sm:text-base'} leading-tight max-w-full break-words tabular-nums`}>{item.value}</span>
         </div>
       ))}
     </div>

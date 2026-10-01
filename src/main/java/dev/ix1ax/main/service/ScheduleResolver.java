@@ -291,11 +291,13 @@ final class ScheduleResolver {
     private String getSlotTime(String groupName, String day, int slot) {
         DaySchedule schedule = scheduleParser.getScheduleForGroup(groupName).get(day);
         if (schedule != null) {
+            String bellTime = schedule.getSlotTime(slot);
+            if (bellTime != null && !bellTime.isBlank()) return bellTime;
             for (Lesson lesson : schedule.getLessons()) {
                 if (lesson.getLessonNumber() == slot) return lesson.getTime();
             }
         }
-        // Для новой пары время может отсутствовать в источнике; не подставляем чужие звонки.
+        // Если звонков действительно нет в источнике, не подставляем время другого дня или курса.
         return "Время уточняется";
     }
 }

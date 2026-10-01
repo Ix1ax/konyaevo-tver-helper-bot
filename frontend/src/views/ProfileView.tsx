@@ -33,7 +33,7 @@ export function ProfileView() {
 
   const [profileError, setProfileError] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(() => !(role === 'student' ? selectedGroup : selectedTeacher));
   const [search, setSearch] = useState('');
   const [course, setCourse] = useState(() =>
     Object.keys(groupsData.groupsByCourse).find((key) =>
@@ -136,14 +136,14 @@ export function ProfileView() {
             <button
               className="choice font-semibold text-xs"
               aria-pressed={role === 'student'}
-              disabled={savingProfile} onClick={() => setRole('student')}
+              disabled={savingProfile} onClick={() => { setSearch(''); setEditing(true); setRole('student'); }}
             >
               Студент
             </button>
             <button
               className="choice font-semibold text-xs"
               aria-pressed={role === 'teacher'}
-              disabled={savingProfile} onClick={() => setRole('teacher')}
+              disabled={savingProfile} onClick={() => { setSearch(''); setEditing(true); setRole('teacher'); }}
             >
               Преподаватель
             </button>

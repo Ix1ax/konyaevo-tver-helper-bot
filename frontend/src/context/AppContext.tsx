@@ -59,6 +59,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [teachersData, setTeachersData] = useState<TeachersResponse>({letters: [], teachers: []});
   const [schedule, setSchedule] = useState<ScheduleMap>({});
   const requestVersion = useRef(0);
+  const catalogsLoaded = useRef(false);
   const profileEdited = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
@@ -137,7 +138,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadData = useCallback(async (isRefresh = false) => {
     const version = ++requestVersion.current;
     setLoadError('');
-    if (isRefresh) setRefreshing(true);
+    // Keep mounted views and their open selectors when the role or target changes.
+    if (isRefresh || catalogsLoaded.current) setRefreshing(true);
     else setLoading(true);
 
     try {
@@ -148,6 +150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ]);
 
       if (version !== requestVersion.current) return;
+      catalogsLoaded.current = true;
       setInfo(fetchedInfo);
       setGroupsData(fetchedGroups);
       setTeachersData(fetchedTeachers);
