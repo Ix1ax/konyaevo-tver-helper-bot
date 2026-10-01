@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from 'react';
 import { ThemeId } from '../types';
 
 interface ThemeDefinition {
@@ -33,7 +33,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('konyaevo_theme', value);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('theme-light', currentThemeDef.isLight);
     document.documentElement.classList.toggle('theme-dark', !currentThemeDef.isLight);
     document.documentElement.style.colorScheme = currentThemeDef.isLight ? 'light' : 'dark';

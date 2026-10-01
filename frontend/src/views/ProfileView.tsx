@@ -53,15 +53,24 @@ export function ProfileView() {
     : (selectedTeacher ? `${selectedTeacher}` : 'Преподаватель не выбран');
 
   async function choose(name: string) {
+    if (savingProfile) return;
+    const previous = role === 'student' ? selectedGroup : selectedTeacher;
+    const select = role === 'student' ? setSelectedGroup : setSelectedTeacher;
     setSavingProfile(true); setProfileError('');
+    // Show the choice immediately; persistence should not delay local navigation.
+    select(name);
+    setEditing(false);
     try {
       if (window.Telegram?.WebApp?.initData) {
         await profileRequest(role === 'student' ? { role, group: name } : { role, teacher: name });
       }
-      if (role === 'student') setSelectedGroup(name); else setSelectedTeacher(name);
-      setEditing(false); haptic.notification('success');
-    } catch (e) { setProfileError(e instanceof Error ? e.message : 'Не удалось сохранить профиль.'); }
-    finally { setSavingProfile(false); }
+      haptic.notification('success');
+    } catch (e) {
+      select(previous);
+      setEditing(true);
+      setProfileError(e instanceof Error ? e.message : 'Не удалось сохранить профиль.');
+      haptic.notification('error');
+    } finally { setSavingProfile(false); }
   }
 
   return (

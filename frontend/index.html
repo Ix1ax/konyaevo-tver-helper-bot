@@ -6,13 +6,22 @@
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#000000" />
     <title>Коняево Расписание</title>
+    <script>
+      // Apply the saved theme before the app and its first loader are painted.
+      try {
+        const light = localStorage.getItem('konyaevo_theme') === 'liquid-glass-light';
+        document.documentElement.classList.add(light ? 'theme-light' : 'theme-dark');
+        document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+        document.documentElement.style.backgroundColor = light ? '#f8fafc' : '#090a0b';
+      } catch {}
+    </script>
     <!-- Telegram Mini App JS SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Unbounded:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" crossorigin="anonymous">
   </head>
-  <body class="bg-black text-white antialiased select-none overflow-x-hidden min-h-screen">
+  <body class="bg-theme-bg text-theme-text antialiased select-none overflow-x-hidden min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

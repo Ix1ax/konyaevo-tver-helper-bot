@@ -206,7 +206,7 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .room-result { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .room-number { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 17px; line-height: 1.5; }
 .room-number span { white-space: nowrap; overflow-wrap: anywhere; }
-.loading-state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 32px 20px; }
+.loading-state { color: var(--color-text); background-color: var(--color-bg); min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 32px 20px; }
 .loading-brand { font-size: 24px; font-weight: 700; }
 .loading-dots { display: flex; gap: 7px; }
 .loading-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); animation: loading-pulse 1.2s ease-in-out infinite; }
