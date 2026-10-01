@@ -101,9 +101,11 @@ public class ScheduleShareService {
 
     public Prepared prepare(long user, String encoded, String caption) {
         if (caption == null || caption.length() > 900) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректная подпись");
+        long started = System.nanoTime();
         byte[] bytes = validate(encoded);
         String id = store(user, bytes);
         String url = publicBase + "/share/images/" + id + ".jpg";
+        log.info("[SCHEDULE SHARE] prepare user={} image={} bytes={} photoUrl={} proxy={}", user, id, bytes.length, url, proxy.type());
         String botLink = "https://t.me/" + username;
         var result = Map.of("type", "photo", "id", id, "photo_url", url, "thumbnail_url", url,
                 "caption", caption,
@@ -141,12 +143,14 @@ public class ScheduleShareService {
                         status, data.path("error_code").asInt(), description.substring(0, Math.min(300, description.length())));
                 throw new IllegalStateException();
             }
+            log.info("[SCHEDULE SHARE] prepared image={} http={} elapsedMs={} expires={}", id, status,
+                    (System.nanoTime() - started) / 1_000_000, data.path("result").path("expiration_date").asLong());
             return new Prepared(preparedId, url);
         } catch (Exception e) {
             synchronized (this) { images.remove(id); }
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             // Exception class identifies timeouts/network failures without logging token-bearing URLs.
-            log.warn("[SCHEDULE SHARE] Preparation failed: {}", e.getClass().getSimpleName());
+            log.warn("[SCHEDULE SHARE] Preparation failed image={}: {}", id, e.getClass().getSimpleName());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Не удалось подготовить отправку в Telegram");
         }
     }

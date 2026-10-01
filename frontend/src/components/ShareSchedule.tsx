@@ -17,6 +17,12 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
   const [prepared, setPrepared] = useState<{ id: string; imageUrl: string } | null>(null);
   const tg = window.Telegram?.WebApp;
   const telegramShare = Boolean(tg?.initData && tg?.isVersionAtLeast?.('8.0') && typeof tg?.shareMessage === 'function');
+  const diagnosticImage = useRef('');
+  const diagnostic = (event: string, detail = '') => {
+    // Temporary diagnostics: never send captions, initData, or the image itself to logs.
+    void signedRequest('/share/diagnostic', { event, imageId: diagnosticImage.current,
+      detail: detail.slice(0, 100), platform: tg?.platform, version: tg?.version }).catch(() => {});
+  };
   const operation = useRef(false);
   const [busyAction, setBusyAction] = useState<'share' | 'download' | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -63,6 +69,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
       reader.readAsDataURL(image.upload);
     });
     const message = await signedRequest<{ id: string; imageUrl: string }>('/share/prepare', { jpeg, caption: scheduleCaption(options) });
+    diagnosticImage.current = message.imageUrl.split("/").pop()?.replace(/\.jpg$/, "") || "";
     setPrepared(message);
     return message;
   };
@@ -70,14 +77,17 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
   useEffect(() => {
     if (!tg?.onEvent) return;
     const failed = ({error: reason}: {error?: string}) => {
+      diagnostic('share_failed', reason || 'unknown');
       finishOperation();
       if (reason && reason !== 'USER_DECLINED') {
         setPrepared(null);
         setError(`Telegram не отправил картинку (${reason}). Попробуйте ещё раз.`);
       }
     };
+    const sent = () => diagnostic('share_sent');
     tg.onEvent('shareMessageFailed', failed);
-    return () => tg.offEvent?.('shareMessageFailed', failed);
+    tg.onEvent('shareMessageSent', sent);
+    return () => { tg.offEvent?.('shareMessageFailed', failed); tg.offEvent?.('shareMessageSent', sent); };
   }, [tg]);
   const download = async () => {
     if (!image || operation.current) return;
@@ -87,7 +97,8 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
         const message = await prepare();
         try {
           // Telegram releases its popup lock when it reports acceptance OR cancellation.
-          tg.downloadFile({ url: message.imageUrl, file_name: 'konyaevo-schedule.jpg' }, () => finishOperation());
+          diagnostic('download_call');
+          tg.downloadFile({ url: message.imageUrl, file_name: 'konyaevo-schedule.jpg' }, (accepted: boolean) => { diagnostic('download_callback', String(accepted)); finishOperation(); });
         } catch (error) {
           if (error instanceof Error && error.message === 'WebAppDownloadFilePopupOpened') {
             // Some clients fail to report closing the native popup. Open the same file normally.
@@ -96,6 +107,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
           } else throw error;
         }
       } catch (error) {
+        diagnostic('client_exception', error instanceof Error ? error.name : 'unknown');
         finishOperation();
         setError(error instanceof Error ? error.message : 'Не удалось сохранить через Telegram. Попробуйте ещё раз.');
       }
@@ -110,12 +122,14 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
     try {
       if (telegramShare) {
         const message = await prepare();
-        tg.shareMessage(message.id, () => finishOperation());
+        diagnostic('share_call');
+        tg.shareMessage(message.id, (sent: boolean) => { diagnostic('share_callback', String(sent)); finishOperation(); });
       } else {
         await navigator.share({ files: [image.file], title: `Коняево · ${options.target}`, text: scheduleCaption(options) });
         finishOperation();
       }
     } catch (error) {
+      diagnostic('client_exception', error instanceof Error ? error.name : 'unknown');
       finishOperation();
       if (!(error instanceof DOMException && error.name === 'AbortError')) setError(error instanceof Error ? error.message : 'Отправка недоступна. Сохраните картинку и прикрепите её в Telegram.');
     }
