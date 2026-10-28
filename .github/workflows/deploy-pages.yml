@@ -51,6 +51,8 @@ jobs:
         working-directory: ./frontend
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
+          # Необязательный резервный адрес API (Cloudflare Worker из deploy/cloudflare-worker).
+          VITE_API_FALLBACK_URL: ${{ vars.VITE_API_FALLBACK_URL }}
         run: npm run build
 
       - name: Setup Pages

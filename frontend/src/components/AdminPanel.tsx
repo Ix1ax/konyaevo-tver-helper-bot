@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ShieldCheck, RefreshCw } from 'lucide-react';
 import { useTelegram } from '../hooks/useTelegram';
 import { useTheme } from '../context/ThemeContext';
-import { getApiBaseUrl } from '../api/client';
+import { apiFetch } from '../api/client';
 
 interface Overview {
   activeDay: number;
@@ -35,14 +35,13 @@ export function AdminPanel({ section = 'users' }: { section?: 'users' | 'schedul
     if (!initData) return;
     const controller = new AbortController();
     let active = true;
-    const timeout = setTimeout(() => controller.abort(), 8000);
     setLoading(true);
     setError('');
-    fetch(`${getApiBaseUrl()}/admin/overview`, {
+    apiFetch('/admin/overview', {
       headers: { 'X-Telegram-Init-Data': initData },
       signal: controller.signal,
       cache: 'no-store',
-    }).then(async (response) => {
+    }, 8000).then(async (response) => {
       if (response.status === 401 || response.status === 403) {
         if (active) setData(null);
         return;
@@ -53,10 +52,9 @@ export function AdminPanel({ section = 'users' }: { section?: 'users' | 'schedul
     }).catch(() => {
       if (active) setError('Сводка не обновилась. Попробуйте ещё раз.');
     }).finally(() => {
-      clearTimeout(timeout);
       if (active) setLoading(false);
     });
-    return () => { active = false; clearTimeout(timeout); controller.abort(); };
+    return () => { active = false; controller.abort(); };
   }, [initData, revision]);
 
   // Панель появляется только после разрешённого сервером ответа.
