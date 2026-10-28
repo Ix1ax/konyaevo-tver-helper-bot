@@ -283,6 +283,13 @@ public class KonyaevoBot {
             }
         }
         String data = callback.getData();
+        if ("more".equals(data) && callback.getMessage() != null) {
+            long chat = callback.getMessage().getChatId();
+            boolean teacher = "teacher".equals(scheduleService.getOrCreateUser(chat).getRole());
+            messageSender.editMessage(chat, callback.getMessage().getMessageId(), "⚙️ <b>Ещё</b>\n\nУведомления, смена расписания и справка.",
+                    KeyboardFactory.buildMoreKeyboard(teacher));
+            return;
+        }
         if (data != null && data.startsWith("donate:") && callback.getMessage() != null) {
             handleDonateCallback(callback.getMessage().getChatId(), callback.getMessage().getMessageId(), data.substring("donate:".length()));
             return;

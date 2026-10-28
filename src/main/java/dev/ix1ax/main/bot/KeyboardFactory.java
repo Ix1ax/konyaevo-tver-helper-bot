@@ -72,19 +72,7 @@ public final class KeyboardFactory {
         if (miniAppUrl != null && !miniAppUrl.isBlank()) {
             rows.add(List.of(webAppButton("📱 Открыть приложение", miniAppUrl)));
         }
-        rows.add(List.of(
-                button("📅 Сегодня", "view:today"),
-                button("⏭ Завтра", "view:tomorrow")
-        ));
-        rows.add(List.of(
-                button("🗓 Неделя", "view:week"),
-                button("🔄 Замены", "view:changes")
-        ));
-        rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
-        rows.add(List.of(button("❔ Помощь", "help"), button("⭐ Поддержать", "donate:menu")));
-        rows.add(List.of(button("👥 Сменить группу", "role:student")));
-        rows.add(List.of(button("🔄 Сменить роль", "logout")));
-        return new InlineKeyboardMarkup(rows);
+        return dashboard(rows);
     }
 
     // ===== Teacher keyboards =====
@@ -120,19 +108,24 @@ public final class KeyboardFactory {
         if (miniAppUrl != null && !miniAppUrl.isBlank()) {
             rows.add(List.of(webAppButton("📱 Открыть приложение", miniAppUrl)));
         }
-        rows.add(List.of(
-                button("📅 Сегодня", "view:today"),
-                button("⏭ Завтра", "view:tomorrow")
-        ));
-        rows.add(List.of(
-                button("🗓 Неделя", "view:week"),
-                button("🔄 Замены", "view:changes")
-        ));
-        rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
-        rows.add(List.of(button("❔ Помощь", "help"), button("⭐ Поддержать", "donate:menu")));
-        rows.add(List.of(button("👤 Сменить преподавателя", "role:teacher")));
-        rows.add(List.of(button("🔄 Сменить роль", "logout")));
+        return dashboard(rows);
+    }
+
+    /** Главное меню: только частые действия, остальное — в «Ещё». */
+    private static InlineKeyboardMarkup dashboard(List<List<InlineKeyboardButton>> rows) {
+        rows.add(List.of(button("📅 Сегодня", "view:today"), button("⏭ Завтра", "view:tomorrow"), button("🗓 Неделя", "view:week")));
+        rows.add(List.of(button("🔄 Замены", "view:changes"), button("⚙️ Ещё", "more")));
+        rows.add(List.of(button("⭐ Поддержать Парыча", "donate:menu")));
         return new InlineKeyboardMarkup(rows);
+    }
+
+    /** «Ещё»: настройки и смена расписания. */
+    public static InlineKeyboardMarkup buildMoreKeyboard(boolean teacher) {
+        return new InlineKeyboardMarkup(List.of(
+                List.of(button("🔔 Уведомления", "notify:settings")),
+                List.of(teacher ? button("👤 Сменить преподавателя", "role:teacher") : button("👥 Сменить группу", "role:student")),
+                List.of(button("🔄 Сменить роль", "logout"), button("❔ Помощь", "help")),
+                List.of(button("‹ Меню", "dashboard"))));
     }
 
     public static InlineKeyboardMarkup buildScheduleKeyboard() {
