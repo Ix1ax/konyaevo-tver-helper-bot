@@ -42,9 +42,13 @@ public class MascotProgress {
     @Column(name = "last_reminder")
     private LocalDate lastReminder;
 
-    /** Награда, которую ещё не показали в приложении: "streak:7" или "level:3". */
+    /** Награды, которые ещё не показали в приложении: "streak:7", "level:3" или "donation:50:star". */
     @Column(name = "pending_reward")
     private String pendingReward;
+
+    /** Сколько звёзд всего пожертвовал пользователь: открывает облики поддержки. Колонка добавлена в 2.2.4, у старых строк null. */
+    @Column(name = "donated_stars")
+    private Integer donatedStars;
 
     public MascotProgress() {}
     public MascotProgress(Long chatId) { this.chatId = chatId; }
@@ -78,4 +82,6 @@ public class MascotProgress {
     public void setLastReminder(LocalDate lastReminder) { this.lastReminder = lastReminder; }
     public String getPendingReward() { return pendingReward; }
     public void setPendingReward(String pendingReward) { this.pendingReward = pendingReward; }
+    public int getDonatedStars() { return donatedStars == null ? 0 : donatedStars; }
+    public void setDonatedStars(int donatedStars) { this.donatedStars = donatedStars; }
 }

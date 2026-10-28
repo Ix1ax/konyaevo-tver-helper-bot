@@ -15,6 +15,10 @@ import dev.ix1ax.main.service.ScheduleService;
 @Component
 public class CallbackRouter {
 
+    /** Сводка пожертвований в /stats; в тестах роутера сервиса нет. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private dev.ix1ax.main.service.DonationService donations;
+
     private static final Logger log = LoggerFactory.getLogger(CallbackRouter.class);
 
     private final java.util.Set<Long> preserveChangesOnTime = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -552,7 +556,7 @@ public class CallbackRouter {
     }
 
     public void sendAdminStats(long chatId) {
-        String report = adminService.getStatsReport() + "\n\nTelegram: <code>" + dev.ix1ax.main.util.HtmlUtils.escapeHtml(String.valueOf(messageSender.telegramRoute())) + "</code>";
+        String report = adminService.getStatsReport() + (donations == null ? "" : "\n\n" + donations.statsLine()) + "\n\nTelegram: <code>" + dev.ix1ax.main.util.HtmlUtils.escapeHtml(String.valueOf(messageSender.telegramRoute())) + "</code>";
         messageSender.sendDirectMessage(chatId, report, KeyboardFactory.buildAdminBackKeyboard());
     }
 

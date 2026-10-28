@@ -80,6 +80,10 @@ public class AdminService {
         return chatId != null && adminIds.contains(chatId);
     }
 
+    public Set<Long> getAdminIds() {
+        return Set.copyOf(adminIds);
+    }
+
     // ===== Statistics =====
 
     /**

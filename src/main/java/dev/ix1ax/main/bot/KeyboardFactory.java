@@ -81,7 +81,7 @@ public final class KeyboardFactory {
                 button("🔄 Замены", "view:changes")
         ));
         rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
-        rows.add(List.of(button("❔ Помощь", "help")));
+        rows.add(List.of(button("❔ Помощь", "help"), button("⭐ Поддержать", "donate:menu")));
         rows.add(List.of(button("👥 Сменить группу", "role:student")));
         rows.add(List.of(button("🔄 Сменить роль", "logout")));
         return new InlineKeyboardMarkup(rows);
@@ -129,7 +129,7 @@ public final class KeyboardFactory {
                 button("🔄 Замены", "view:changes")
         ));
         rows.add(List.of(button("🔔 Уведомления", "notify:settings")));
-        rows.add(List.of(button("❔ Помощь", "help")));
+        rows.add(List.of(button("❔ Помощь", "help"), button("⭐ Поддержать", "donate:menu")));
         rows.add(List.of(button("👤 Сменить преподавателя", "role:teacher")));
         rows.add(List.of(button("🔄 Сменить роль", "logout")));
         return new InlineKeyboardMarkup(rows);
@@ -140,6 +140,26 @@ public final class KeyboardFactory {
                 List.of(button("📅 Сегодня", "view:today"), button("⏭ Завтра", "view:tomorrow")),
                 List.of(button("🗓 Неделя", "view:week"), button("🔄 Замены", "view:changes")),
                 List.of(button("‹ Меню", "dashboard"))));
+    }
+
+    // ===== Поддержка звёздами =====
+
+    /** Суммы поддержки: каждая кнопка присылает счёт в звёздах. */
+    public static InlineKeyboardMarkup buildDonateKeyboard(List<Integer> amounts) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        for (int i = 0; i < amounts.size(); i += 2)
+            rows.add(amounts.subList(i, Math.min(i + 2, amounts.size())).stream()
+                    .map(stars -> button("⭐ " + stars, "donate:" + stars)).toList());
+        rows.add(List.of(button("✏️ Своя сумма", "donate:custom")));
+        rows.add(List.of(button("‹ Меню", "dashboard")));
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    public static InlineKeyboardMarkup buildDonateThanksKeyboard() {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        if (miniAppUrl != null && !miniAppUrl.isBlank()) rows.add(List.of(webAppButton("🎉 Посмотреть на Парыча", miniAppUrl)));
+        rows.add(List.of(button("‹ Меню", "dashboard")));
+        return new InlineKeyboardMarkup(rows);
     }
 
     // ===== Admin keyboards =====

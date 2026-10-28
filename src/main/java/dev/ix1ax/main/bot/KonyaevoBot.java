@@ -19,6 +19,8 @@ import dev.ix1ax.main.service.ScheduleService;
 public class KonyaevoBot {
 
     private final java.util.Map<Long, Long> pendingBroadcastMedia = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Кто нажал «Своя сумма» и когда: ждём число 10 минут. */
+    private final java.util.Map<Long, Long> pendingDonation = new java.util.concurrent.ConcurrentHashMap<>();
     private final ChatUpdateDispatcher updates;
 
     private static final Logger log = LoggerFactory.getLogger(KonyaevoBot.class);
@@ -31,6 +33,7 @@ public class KonyaevoBot {
     private final CallbackRouter callbackRouter;
     private final MessageSender messageSender;
     private final dev.ix1ax.main.service.AdminService adminService;
+    private final dev.ix1ax.main.service.DonationService donations;
 
     public KonyaevoBot(@Value("${bot.max-threads:16}") int maxThreads,
                        @Value("${bot.mini-app-url:}") String miniAppUrl,
@@ -38,13 +41,15 @@ public class KonyaevoBot {
                        ScheduleService scheduleService,
                        CallbackRouter callbackRouter,
                        MessageSender messageSender,
-                       dev.ix1ax.main.service.AdminService adminService) {
+                       dev.ix1ax.main.service.AdminService adminService,
+                       dev.ix1ax.main.service.DonationService donations) {
         this.updates = new ChatUpdateDispatcher(Math.max(4, maxThreads));
         this.telegram = telegram;
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
         this.adminService = adminService;
+        this.donations = donations;
         KeyboardFactory.setMiniAppUrl(miniAppUrl);
     }
 
@@ -59,6 +64,7 @@ public class KonyaevoBot {
 
     public void onUpdateReceived(Update update) {
         Long chat = update.hasMyChatMember() ? update.getMyChatMember().getChat().getId() : update.hasMessage() ? update.getMessage().getChatId()
+                : update.hasPreCheckoutQuery() ? update.getPreCheckoutQuery().getFrom().getId()
                 : update.hasCallbackQuery() && update.getCallbackQuery().getMessage() != null ? update.getCallbackQuery().getMessage().getChatId() : null;
         updates.dispatch(chat == null ? 0 : chat, () -> processUpdate(update));
     }
@@ -68,7 +74,11 @@ public class KonyaevoBot {
 
     private void processUpdate(Update update) {
         try {
-            if (update.hasMyChatMember()) {
+            if (update.hasPreCheckoutQuery()) {
+                donations.preCheckout(update.getPreCheckoutQuery());
+            } else if (update.hasMessage() && update.getMessage().hasSuccessfulPayment()) {
+                donations.paid(update.getMessage());
+            } else if (update.hasMyChatMember()) {
                 handleMyChatMember(update);
             } else if (update.hasMessage() && update.getMessage().hasText()) {
                 handleTextMessage(update);
@@ -130,6 +140,37 @@ public class KonyaevoBot {
         if (trimmed.equals("/help")) {
             pendingBroadcastMedia.remove(chatId);
             messageSender.sendDirectMessage(chatId, HelpText.forUser(adminService.isAdmin(chatId)), KeyboardFactory.buildScheduleKeyboard());
+            return;
+        }
+        // Своя сумма поддержки: ждём число после кнопки «Своя сумма», любая команда отменяет ввод.
+        Long donationAsked = pendingDonation.remove(chatId);
+        if (donationAsked != null && !trimmed.startsWith("/") && System.currentTimeMillis() - donationAsked < 600000) {
+            Integer stars = dev.ix1ax.main.service.DonationService.parseAmount(trimmed);
+            if (stars == null) {
+                pendingDonation.put(chatId, System.currentTimeMillis());
+                messageSender.sendDirectMessage(chatId, "Нужно целое число от " + dev.ix1ax.main.service.DonationService.MIN + " до "
+                        + dev.ix1ax.main.service.DonationService.MAX + ", например <b>150</b>. Отмена: /cancel", null);
+            } else if (!donations.sendInvoice(chatId, stars)) {
+                messageSender.sendDirectMessage(chatId, "Не удалось выставить счёт. Попробуйте ещё раз через минуту.", null);
+            }
+            return;
+        }
+        // Поддержка звёздами: команда, ссылка t.me/<бот>?start=donate и вопросы по оплате.
+        if (trimmed.equals("/donate") || trimmed.equals("/start donate")) {
+            pendingBroadcastMedia.remove(chatId);
+            messageSender.sendDirectMessage(chatId, dev.ix1ax.main.service.DonationService.menuText(),
+                    KeyboardFactory.buildDonateKeyboard(dev.ix1ax.main.service.DonationService.AMOUNTS));
+            return;
+        }
+        if (trimmed.equals("/paysupport")) {
+            messageSender.sendDirectMessage(chatId, dev.ix1ax.main.service.DonationService.supportText(), null);
+            return;
+        }
+        if (trimmed.startsWith("/paysupport ")) {
+            String question = trimmed.substring("/paysupport ".length()).trim();
+            String forward = dev.ix1ax.main.service.DonationService.supportForward(chatId, sender, question.substring(0, Math.min(question.length(), 1500)));
+            adminService.getAdminIds().forEach(admin -> messageSender.sendDirectMessage(admin, forward, null));
+            messageSender.sendDirectMessage(chatId, "Спасибо, вопрос передан администратору. Ответим здесь же.", null);
             return;
         }
         if (trimmed.equals("/cancel")) {
@@ -241,7 +282,30 @@ public class KonyaevoBot {
                 log.debug("Failed to answer callback: {}", e.getMessage());
             }
         }
+        String data = callback.getData();
+        if (data != null && data.startsWith("donate:") && callback.getMessage() != null) {
+            handleDonateCallback(callback.getMessage().getChatId(), callback.getMessage().getMessageId(), data.substring("donate:".length()));
+            return;
+        }
         callbackRouter.route(callback);
+    }
+
+    private void handleDonateCallback(long chatId, int messageId, String value) {
+        if (value.equals("custom")) {
+            pendingDonation.put(chatId, System.currentTimeMillis());
+            messageSender.sendDirectMessage(chatId, dev.ix1ax.main.service.DonationService.customPrompt(), null);
+            return;
+        }
+        if (value.equals("menu")) {
+            messageSender.editMessage(chatId, messageId, dev.ix1ax.main.service.DonationService.menuText(),
+                    KeyboardFactory.buildDonateKeyboard(dev.ix1ax.main.service.DonationService.AMOUNTS));
+            return;
+        }
+        try {
+            int stars = Integer.parseInt(value);
+            if (dev.ix1ax.main.service.DonationService.allowed(stars) && donations.sendInvoice(chatId, stars)) return;
+        } catch (NumberFormatException ignored) { /* Старая кнопка или чужие данные — покажем ошибку ниже. */ }
+        messageSender.sendDirectMessage(chatId, "Не удалось выставить счёт. Попробуйте ещё раз через минуту.", null);
     }
 
     // ===== Auto-login: send initial message based on saved user settings =====
