@@ -4,6 +4,7 @@ import { ShareSchedule } from './ShareSchedule';
 import { useTheme } from '../context/ThemeContext';
 import { moscowDayDate } from '../utils/calendar';
 import { useApp } from '../context/AppContext';
+import { useMascot } from '../context/MascotContext';
 
 const items = [
   ['today', 'Сегодня', Calendar], ['tomorrow', 'Завтра', CalendarCheck], ['week', 'Неделя', CalendarDays],
@@ -13,6 +14,7 @@ const items = [
 export function BottomNav() {
   const { activeTab, setActiveTab, isAdmin, role, selectedGroup, selectedTeacher, schedule, info, refreshing, loading } = useApp();
   const { currentThemeDef } = useTheme();
+  const { sendEvent } = useMascot();
   const choices = [false,true].map(tomorrow => {
     const day = tomorrow ? info.tomorrowName : info.todayName;
     const red = tomorrow ? info.tomorrowRedWeek ?? info.isRedWeek : info.isRedWeek;
@@ -28,7 +30,8 @@ export function BottomNav() {
       </button>
     </div>}
     <div className="max-w-lg mx-auto px-3 pt-2">
-      <ShareSchedule fullWidth options={choices[0].options} choices={choices} disabled={refreshing || loading || !choices[0].options.target} />
+      <ShareSchedule fullWidth options={choices[0].options} choices={choices} disabled={refreshing || loading || !choices[0].options.target}
+        onShared={() => sendEvent('share')} />
     </div>
     <div className="max-w-lg mx-auto flex pt-2 pb-[max(env(safe-area-inset-bottom),10px)] px-2">
       {items.map(([tab, label, Icon]) => <button key={tab} onClick={() => setActiveTab(tab as ActiveTab)}

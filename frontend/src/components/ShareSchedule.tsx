@@ -5,7 +5,10 @@ import { LoadingIndicator } from './Ui';
 import { signedRequest } from '../api/client';
 import { scheduleCaption, renderScheduleImages, type ScheduleImageOptions } from '../utils/scheduleImage';
 
-export function ShareSchedule({ options: baseOptions, disabled = false, fullWidth = false, choices }: { options: ScheduleImageOptions; disabled?: boolean; fullWidth?: boolean; choices?: {label: string; options: ScheduleImageOptions}[] }) {
+export function ShareSchedule({ options: baseOptions, disabled = false, fullWidth = false, choices, onShared }: { options: ScheduleImageOptions; disabled?: boolean; fullWidth?: boolean; choices?: {label: string; options: ScheduleImageOptions}[]; onShared?: () => void }) {
+  // Обработчик Telegram подписывается один раз, поэтому свежий колбэк берём из ref.
+  const sharedCallback = useRef(onShared);
+  sharedCallback.current = onShared;
   const [choice, setChoice] = useState(0);
   // Parent renders recreate option objects; only changed export data should regenerate the image.
   const optionsKey = JSON.stringify(choices?.[choice]?.options || baseOptions);
@@ -84,7 +87,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
         setError(`Telegram не отправил картинку (${reason}). Попробуйте ещё раз.`);
       }
     };
-    const sent = () => diagnostic('share_sent');
+    const sent = () => { diagnostic('share_sent'); sharedCallback.current?.(); };
     tg.onEvent('shareMessageFailed', failed);
     tg.onEvent('shareMessageSent', sent);
     return () => { tg.offEvent?.('shareMessageFailed', failed); tg.offEvent?.('shareMessageSent', sent); };
@@ -126,6 +129,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
         tg.shareMessage(message.id, (sent: boolean) => { diagnostic('share_callback', String(sent)); finishOperation(); });
       } else {
         await navigator.share({ files: [image.file], title: `Коняево · ${options.target}`, text: scheduleCaption(options) });
+        sharedCallback.current?.();
         finishOperation();
       }
     } catch (error) {

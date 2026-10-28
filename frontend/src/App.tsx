@@ -14,6 +14,8 @@ import { useTelegram } from './hooks/useTelegram';
 import { EmptyState, LoadingIndicator } from './components/Ui';
 
 import AdminView from './views/AdminView';
+import { MascotView } from './views/MascotView';
+import { MascotReward } from './components/MascotReward';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 
 export function App() {
@@ -23,7 +25,7 @@ export function App() {
   const noticeOpen = dismissedNotice !== noticeKey && !hasSeenChatNotice(noticeKey);
   const { activeTab, setActiveTab, loadError, loading, role, selectedGroup, selectedTeacher, isAdmin, refreshing } = useApp();
   const views = { today: TodayView, tomorrow: TomorrowView, week: WeekView, classrooms: ClassroomsView,
-    teachers: TeachersView, changes: ChangesView, profile: ProfileView, admin: AdminView };
+    teachers: TeachersView, changes: ChangesView, profile: ProfileView, admin: AdminView, mascot: MascotView };
   const View = views[activeTab];
   const needsProfile = ['today', 'tomorrow', 'week'].includes(activeTab);
   const selected = role === 'student' ? selectedGroup : selectedTeacher;
@@ -41,5 +43,6 @@ export function App() {
     <BottomNav />
     {noticeOpen && <ChatVersionNotice storageKey={noticeKey} onDismiss={() => setDismissedNotice(noticeKey)} />}
     <FeedbackPrompt enabled={!noticeOpen} />
+    {!loading && !noticeOpen && <MascotReward />}
   </div>;
 }
