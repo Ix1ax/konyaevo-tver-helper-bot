@@ -48,8 +48,11 @@ if [ -z "$LINK" ]; then
     exit 1
 fi
 
-NEW=$(mktemp)
-trap 'rm -f "$NEW"' EXIT
+command -v xray > /dev/null || { echo "xray не найден в PATH" >&2; exit 1; }
+# Формат конфига xray определяет по расширению, поэтому временный файл — .json.
+TMP=$(mktemp -d)
+NEW="$TMP/config.json"
+trap 'rm -rf "$TMP"' EXIT
 python3 - "$LINK" "$SOCKS_PORT" "$HTTP_PORT" > "$NEW" <<'PY'
 import json, sys
 from urllib.parse import urlsplit, parse_qs, unquote
@@ -109,7 +112,11 @@ name = unquote(url.fragment) if url.fragment else url.hostname
 print(f"VPN: {name} ({url.hostname}:{url.port or 443}, {network}/{security})", file=sys.stderr)
 PY
 
-xray run -test -config "$NEW" > /dev/null || { echo "xray не принял конфиг, ничего не изменено" >&2; exit 1; }
+if ! OUTPUT=$(xray run -test -config "$NEW" 2>&1); then
+    echo "$OUTPUT" | tail -5 >&2
+    echo "xray $(xray version 2>/dev/null | head -1 | awk '{print $2}') не принял конфиг, ничего не изменено. REALITY нужен xray 1.8 или новее." >&2
+    exit 1
+fi
 
 BACKUP=""
 if [ -f "$CONFIG" ]; then
