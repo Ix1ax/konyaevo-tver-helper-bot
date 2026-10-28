@@ -1,4 +1,5 @@
 import { RequestCache } from '../utils/requestCache';
+import { liveInfo, snapshotFile } from '../utils/snapshot';
 const catalogs = new RequestCache();
 import {
   ClassroomsResponse,
@@ -10,9 +11,58 @@ import {
   ChangeItem,
 } from '../types';
 
+const normalizeBase = (base: string) => {
+  const trimmed = base.trim().replace(/\/$/, '');
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+};
+// Резервный адрес нужен, когда мобильная сеть или VPN не пропускают запросы к основному серверу.
+const API_BASES = [...new Set([import.meta.env.VITE_API_URL || '/api', import.meta.env.VITE_API_FALLBACK_URL]
+  .filter((base): base is string => Boolean(base?.trim())).map(normalizeBase))];
+const PREFERRED_BASE_KEY = 'konyaevo_api_base';
+
+function orderedBases(): string[] {
+  let preferred: string | null = null;
+  try { preferred = localStorage.getItem(PREFERRED_BASE_KEY); } catch { /* Хранилище может быть недоступно. */ }
+  return preferred && API_BASES.includes(preferred) ? [preferred, ...API_BASES.filter(base => base !== preferred)] : API_BASES;
+}
+
 export function getApiBaseUrl(): string {
-  const base = ((import.meta.env.VITE_API_URL as string) || '/api').trim().replace(/\/$/, '');
-  return base.endsWith('/api') ? base : `${base}/api`;
+  return orderedBases()[0];
+}
+
+/** Ни один адрес API не ответил: сеть не пропускает запросы к серверу. */
+export class ApiUnavailableError extends Error {
+  constructor() { super('Нет связи с сервером расписания.'); this.name = 'ApiUnavailableError'; }
+}
+
+/**
+ * Запрос к API: сначала адрес, который отвечал в прошлый раз, затем остальные; при полной
+ * неудаче — ещё один круг через секунду. Любой полученный ответ, даже с ошибкой HTTP,
+ * считается доступностью адреса и возвращается вызывающему коду.
+ */
+export async function apiFetch(path: string, init: RequestInit = {}, timeoutMs = 7000): Promise<Response> {
+  const outer = init.signal;
+  for (let round = 0; round < 2; round++) {
+    for (const base of orderedBases()) {
+      if (outer?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      outer?.addEventListener('abort', abort);
+      const timer = setTimeout(abort, timeoutMs);
+      try {
+        const response = await fetch(`${base}${path}`, { ...init, signal: controller.signal });
+        try { localStorage.setItem(PREFERRED_BASE_KEY, base); } catch { /* Не критично. */ }
+        return response;
+      } catch (error) {
+        console.warn(`[API] ${base}${path} недоступен`, error);
+      } finally {
+        clearTimeout(timer);
+        outer?.removeEventListener('abort', abort);
+      }
+    }
+    if (round === 0) await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new ApiUnavailableError();
 }
 
 export interface SavedProfile {
@@ -28,169 +78,199 @@ export interface SavedProfile {
 export async function profileRequest(update?: Partial<SavedProfile>): Promise<SavedProfile> {
   const data = window.Telegram?.WebApp?.initData;
   if (!data) throw new Error('Откройте приложение через Telegram для настройки уведомлений.');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const res = await fetch(`${getApiBaseUrl()}/profile`, {
-      method: update ? 'PUT' : 'GET', signal: controller.signal,
-      headers: { 'X-Telegram-Init-Data': data, 'Content-Type': 'application/json' },
-      body: update ? JSON.stringify(update) : undefined,
-    });
-    if (!res.ok) throw new Error(res.status === 401 ? 'Откройте приложение заново через Telegram.' : 'Не удалось сохранить настройки. Попробуйте ещё раз.');
-    return await res.json();
-  } finally { clearTimeout(timeout); }
+  const res = await apiFetch('/profile', {
+    method: update ? 'PUT' : 'GET',
+    headers: { 'X-Telegram-Init-Data': data, 'Content-Type': 'application/json' },
+    body: update ? JSON.stringify(update) : undefined,
+  }, 10000);
+  if (!res.ok) throw new Error(res.status === 401 ? 'Откройте приложение заново через Telegram.' : 'Не удалось сохранить настройки. Попробуйте ещё раз.');
+  return await res.json();
 }
 
 export async function signedRequest<T>(path: string, body?: unknown): Promise<T> {
   const initData = window.Telegram?.WebApp?.initData;
   if (!initData) throw new Error('Откройте приложение через Telegram.');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), path === '/share/prepare' ? 40000 : 10000);
-  try {
-    const response = await fetch(`${getApiBaseUrl()}${path}`, {
-      method: body === undefined ? 'GET' : 'POST', signal: controller.signal, cache: 'no-store',
-      headers: { 'X-Telegram-Init-Data': initData, 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    if (!response.ok && path.startsWith('/share/')) {
-      const message: Record<number, string> = {
-        400: 'Сервер отклонил картинку расписания.',
-        401: 'Откройте приложение заново через Telegram.',
-        403: 'Нет доступа к подготовке картинки.',
-        404: 'API отправки картинки недоступно на сервере.',
-        413: 'Картинка слишком большая для отправки.',
-        429: 'Подождите несколько секунд перед повторной отправкой.',
-        502: 'Сервер не смог подготовить сообщение в Telegram. Нужна проверка серверных логов.',
-        503: 'Сервис отправки занят. Попробуйте позже.',
-      };
-      throw new Error(message[response.status] || `Ошибка подготовки картинки: HTTP ${response.status}.`);
-    }
-    if (!response.ok) throw new Error(response.status === 401 ? 'Откройте приложение заново через Telegram.' : response.status === 409 ? 'Оценка уже сохранена.' : 'Не удалось выполнить запрос. Попробуйте ещё раз.');
-    if (response.status === 204) return undefined as T;
-    return await response.json();
-  } finally { clearTimeout(timeout); }
-}
-
-// Helper to fetch JSON with timeout and console logging
-async function fetchWithTimeout<T>(url: string, timeoutMs = 6000): Promise<T> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const json = (await res.json()) as T;
-    return json;
-  } catch (err) {
-    console.error(`[API] Failed request to ${url}:`, err);
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
+  const response = await apiFetch(path, {
+    method: body === undefined ? 'GET' : 'POST', cache: 'no-store',
+    headers: { 'X-Telegram-Init-Data': initData, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }, path === '/share/prepare' ? 40000 : 10000);
+  if (!response.ok && path.startsWith('/share/')) {
+    const message: Record<number, string> = {
+      400: 'Сервер отклонил картинку расписания.',
+      401: 'Откройте приложение заново через Telegram.',
+      403: 'Нет доступа к подготовке картинки.',
+      404: 'API отправки картинки недоступно на сервере.',
+      413: 'Картинка слишком большая для отправки.',
+      429: 'Подождите несколько секунд перед повторной отправкой.',
+      502: 'Сервер не смог подготовить сообщение в Telegram. Нужна проверка серверных логов.',
+      503: 'Сервис отправки занят. Попробуйте позже.',
+    };
+    throw new Error(message[response.status] || `Ошибка подготовки картинки: HTTP ${response.status}.`);
   }
+  if (!response.ok) throw new Error(response.status === 401 ? 'Откройте приложение заново через Telegram.' : response.status === 409 ? 'Оценка уже сохранена.' : 'Не удалось выполнить запрос. Попробуйте ещё раз.');
+  if (response.status === 204) return undefined as T;
+  return await response.json();
 }
+
+// Копия расписания публикуется вместе с приложением (scripts/snapshot.cjs).
+const SNAPSHOT_BASE = `${import.meta.env.BASE_URL}data/`;
+let snapshotAt: string | null = null;
+let snapshotMeta: Promise<string | null> | null = null;
+
+/** Время копии, если последние данные пришли из неё, а не с сервера. */
+export function getSnapshotTime(): string | null { return snapshotAt; }
+
+async function fromSnapshot<T>(path: string): Promise<T> {
+  const searching = path.startsWith('/teachers/search?');
+  const file = searching ? 'teachers.json' : snapshotFile(path);
+  if (!file) throw new ApiUnavailableError();
+  const response = await fetch(SNAPSHOT_BASE + file, { cache: 'no-cache' }).catch(() => null);
+  if (!response?.ok) throw new ApiUnavailableError();
+  const data = await response.json();
+  snapshotMeta ??= fetch(SNAPSHOT_BASE + 'meta.json', { cache: 'no-cache' })
+    .then(r => r.ok ? r.json() : null).then(meta => meta?.generatedAt ?? null).catch(() => null);
+  snapshotAt = await snapshotMeta ?? new Date().toISOString();
+  if (path === '/info') return liveInfo(data) as T;
+  if (searching) {
+    const query = (new URLSearchParams(path.split('?')[1]).get('q') || '').trim().toLowerCase();
+    return (data as TeachersResponse).teachers.filter(name => name.toLowerCase().includes(query)) as T;
+  }
+  return data as T;
+}
+
+const COPY_AFTER_MS = 5000, COPY_FOR_MS = 60000;
+let apiDownUntil = 0;
+const hasCopy = (path: string) => path.startsWith('/teachers/search?') || snapshotFile(path) !== null;
+
+/**
+ * Открытый GET-запрос: если сервер не ответил за 5 секунд или недоступен, отдаём копию, а запрос
+ * к серверу продолжается в фоне. Пока сервер считается недоступным, следующие запросы сразу идут в копию.
+ */
+async function getJson<T>(path: string): Promise<T> {
+  if (hasCopy(path) && Date.now() < apiDownUntil) {
+    try { return await fromSnapshot<T>(path); } catch { /* Копии нет — пробуем сервер. */ }
+  }
+  const live = (async () => {
+    const res = await apiFetch(path);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as T;
+    apiDownUntil = 0;
+    snapshotAt = null;
+    return data;
+  })();
+  if (!hasCopy(path)) return live;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false, liveFailed = false, copy: Promise<void> | null = null;
+    const finish = (settle: () => void) => { if (!settled) { settled = true; settle(); } };
+    const useCopy = () => copy ??= fromSnapshot<T>(path).then(
+      data => { apiDownUntil = Date.now() + COPY_FOR_MS; finish(() => resolve(data)); },
+      () => { copy = null; if (liveFailed) finish(() => reject(new ApiUnavailableError())); });
+    const timer = setTimeout(useCopy, COPY_AFTER_MS);
+    live.then(data => { clearTimeout(timer); finish(() => resolve(data)); }, error => {
+      liveFailed = true;
+      clearTimeout(timer);
+      if (error instanceof ApiUnavailableError) useCopy(); else finish(() => reject(error));
+    });
+  });
+}
+
+// Сетевую ошибку пробрасываем как есть: интерфейс показывает для неё отдельную подсказку.
+const keepNetworkError = (error: unknown, message: string) => error instanceof ApiUnavailableError ? error : new Error(message);
 
 export const api = {
   refreshCatalogs() { catalogs.clear(); },
   async isAdmin(): Promise<boolean> {
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) return false;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/admin/overview`, { headers: { 'X-Telegram-Init-Data': initData }, signal: controller.signal, cache: 'no-store' });
+      const response = await apiFetch('/admin/overview', { headers: { 'X-Telegram-Init-Data': initData }, cache: 'no-store' }, 8000);
       return response.ok;
     } catch { return false; }
-    finally { clearTimeout(timeout); }
   },
   async getInfo(): Promise<InfoResponse> {
     try {
-      const data = await fetchWithTimeout<InfoResponse & { redWeek?: boolean }>(`${getApiBaseUrl()}/info`);
+      const data = await getJson<InfoResponse & { redWeek?: boolean }>('/info');
       // Старый сервер использует redWeek; совместимость нужна на время обновления.
       return { ...data, isRedWeek: data.isRedWeek ?? data.redWeek ?? false };
     } catch (e) {
-      console.warn('[API] Could not fetch info from', getApiBaseUrl(), e);
+      console.warn('[API] Could not fetch info', e);
       throw e;
     }
   },
 
   async getGroups(): Promise<GroupsResponse> {
     try {
-      const data = await catalogs.load(`${getApiBaseUrl()}/groups`, 300000, () => fetchWithTimeout<GroupsResponse>(`${getApiBaseUrl()}/groups`));
+      const data = await catalogs.load('/groups', 300000, () => getJson<GroupsResponse>('/groups'));
       return data;
-    } catch {
-      throw new Error('Не удалось загрузить группы');
+    } catch (e) {
+      throw keepNetworkError(e, 'Не удалось загрузить группы');
     }
   },
 
   async getTeachers(): Promise<TeachersResponse> {
     try {
-      const data = await catalogs.load(`${getApiBaseUrl()}/teachers`, 300000, () => fetchWithTimeout<TeachersResponse>(`${getApiBaseUrl()}/teachers`));
+      const data = await catalogs.load('/teachers', 300000, () => getJson<TeachersResponse>('/teachers'));
       return data;
-    } catch {
-      throw new Error('Не удалось загрузить преподавателей');
+    } catch (e) {
+      throw keepNetworkError(e, 'Не удалось загрузить преподавателей');
     }
   },
 
   async getGroupSchedule(groupName: string): Promise<ScheduleMap> {
     try {
-      const data = await fetchWithTimeout<ScheduleMap>(`${getApiBaseUrl()}/schedule/group/${encodeURIComponent(groupName)}`);
+      const data = await getJson<ScheduleMap>(`/schedule/group/${encodeURIComponent(groupName)}`);
       return data;
-    } catch {
-      throw new Error('Не удалось загрузить расписание');
+    } catch (e) {
+      throw keepNetworkError(e, 'Не удалось загрузить расписание');
     }
   },
 
   async getTeacherSchedule(teacherName: string): Promise<ScheduleMap> {
     try {
-      const data = await fetchWithTimeout<ScheduleMap>(`${getApiBaseUrl()}/schedule/teacher/${encodeURIComponent(teacherName)}`);
+      const data = await getJson<ScheduleMap>(`/schedule/teacher/${encodeURIComponent(teacherName)}`);
       return data;
-    } catch {
-      throw new Error('Не удалось загрузить расписание');
+    } catch (e) {
+      throw keepNetworkError(e, 'Не удалось загрузить расписание');
     }
   },
 
   async getBaseSchedule(role: 'student' | 'teacher', target: string): Promise<ScheduleMap> {
-    const url = `${getApiBaseUrl()}/schedule/base/${role === 'student' ? 'group' : 'teacher'}/${encodeURIComponent(target)}`;
-    return catalogs.load(url, 300000, () => fetchWithTimeout<ScheduleMap>(url));
+    const path = `/schedule/base/${role === 'student' ? 'group' : 'teacher'}/${encodeURIComponent(target)}`;
+    return catalogs.load(path, 300000, () => getJson<ScheduleMap>(path));
   },
 
   async getGroupChanges(groupName: string): Promise<ChangesResponse> {
     try {
-      return await fetchWithTimeout<ChangesResponse>(`${getApiBaseUrl()}/changes/group/${encodeURIComponent(groupName)}`);
-    } catch {
-      throw new Error('Не удалось загрузить замены');
+      return await getJson<ChangesResponse>(`/changes/group/${encodeURIComponent(groupName)}`);
+    } catch (e) {
+      throw keepNetworkError(e, 'Не удалось загрузить замены');
     }
   },
 
   async getAllChanges(): Promise<ChangeItem[]> {
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) throw new Error('Откройте приложение через Telegram.');
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/admin/changes`, { headers: { 'X-Telegram-Init-Data': initData }, signal: controller.signal, cache: 'no-store' });
-      if (!response.ok) throw new Error('Общий список доступен только администратору.');
-      return await response.json();
-    } finally { clearTimeout(timeout); }
+    const response = await apiFetch('/admin/changes', { headers: { 'X-Telegram-Init-Data': initData }, cache: 'no-store' }, 8000);
+    if (!response.ok) throw new Error('Общий список доступен только администратору.');
+    return await response.json();
   },
 
   async getFreeClassrooms(day: string, slot: number, weekType: string): Promise<ClassroomsResponse> {
     try {
       const params = new URLSearchParams({ day, slot: String(slot), weekType });
-      const data = await fetchWithTimeout<ClassroomsResponse>(`${getApiBaseUrl()}/classrooms/free?${params.toString()}`);
+      const data = await getJson<ClassroomsResponse>(`/classrooms/free?${params.toString()}`);
       return data;
-    } catch {
-      throw new Error('Не удалось загрузить аудитории');
+    } catch (e) {
+      throw keepNetworkError(e, 'Не удалось загрузить аудитории');
     }
   },
 
   async searchTeachers(query: string): Promise<string[]> {
     try {
-      return await fetchWithTimeout<string[]>(`${getApiBaseUrl()}/teachers/search?q=${encodeURIComponent(query)}`);
-    } catch {
-      throw new Error('Поиск преподавателей недоступен');
+      return await getJson<string[]>(`/teachers/search?q=${encodeURIComponent(query)}`);
+    } catch (e) {
+      throw keepNetworkError(e, 'Поиск преподавателей недоступен');
     }
   },
 };

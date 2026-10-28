@@ -1,0 +1,6 @@
+name = "konyaevo-api-proxy"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+BACKEND_URL = "https://konyaevo-api.ixlax.space"

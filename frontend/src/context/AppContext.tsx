@@ -7,7 +7,7 @@ import {
   TeachersResponse,
   UserRole,
 } from '../types';
-import { api, profileRequest, signedRequest } from '../api/client';
+import { api, ApiUnavailableError, getSnapshotTime, profileRequest, signedRequest } from '../api/client';
 import { useTelegram } from '../hooks/useTelegram';
 
 interface AppContextType {
@@ -28,6 +28,8 @@ interface AppContextType {
   schedule: ScheduleMap;
   loading: boolean;
   loadError: string;
+  /** Время копии расписания, если сервер недоступен и данные взяты из неё. */
+  offlineAt: string | null;
   refreshing: boolean;
   previewWeekType: 'current' | 'red' | 'blue';
   setPreviewWeekType: (type: 'current' | 'red' | 'blue') => void;
@@ -87,6 +89,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(heartbeat);
   }, []);
   const [loadError, setLoadError] = useState('');
+  const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [previewWeekType, setPreviewWeekType] = useState<'current' | 'red' | 'blue'>('current');
@@ -177,12 +180,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else {
         fetchedSchedule = {};
       }
-      if (version === requestVersion.current) setSchedule(fetchedSchedule);
+      if (version === requestVersion.current) { setSchedule(fetchedSchedule); setOfflineAt(getSnapshotTime()); }
       return true;
     } catch (e) {
       if (version === requestVersion.current) {
         setSchedule({});
-        setLoadError('Не удалось загрузить данные. Проверьте подключение и обновите расписание.');
+        setOfflineAt(null);
+        // Сеть и ошибка сервера требуют разных действий от пользователя.
+        setLoadError(e instanceof ApiUnavailableError
+          ? 'Телефон не достучался до сервера. Чаще всего мешает VPN или ограничения мобильного интернета: выключите VPN или переключитесь на Wi‑Fi.'
+          : 'Сервер ответил с ошибкой. Попробуйте ещё раз чуть позже.');
       }
       return false;
     } finally {
@@ -223,6 +230,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         schedule,
         loading,
         loadError,
+        offlineAt,
         refreshing,
         previewWeekType,
         setPreviewWeekType,
