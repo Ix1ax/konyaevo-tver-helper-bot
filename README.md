@@ -47,7 +47,9 @@ cp .env.example .env
 Параметры в `.env`:
 - `BOT_TOKEN` — токен бота от @BotFather (обязательно)
 - `BOT_USERNAME` — юзернейм бота
-- `BOT_BASE_URL` — базовый URL Telegram Bot API (опционально, по умолчанию `https://api.telegram.org/bot`. Указывается при работе через Cloudflare Worker или reverse proxy)
+- `BOT_BASE_URL`, `BOT_PROXY_*` — основной маршрут до Telegram Bot API (по умолчанию `https://api.telegram.org/bot` без прокси)
+- `BOT_FALLBACK_BASE_URL`, `BOT_FALLBACK_PROXY_*` — запасной маршрут (см. «Маршруты до Telegram и VPN»)
+- `VPN_URL` — ссылка `vless://` для локального xray, в одинарных кавычках
 - `DB_URL` — строка подключения к базе H2 (по умолчанию `jdbc:h2:file:./data/konyaevo-bot`)
 - `DB_PASSWORD` — пароль к БД (если задан)
 
@@ -57,7 +59,7 @@ cp .env.example .env
 ./mvnw clean package -DskipTests
 ```
 
-Собранный JAR появится в `target/konyaevo-bot-1.3.0.jar`.
+Собранный JAR появится в `target/konyaevo-bot-2.2.1.jar`.
 
 ### 3. Запуск
 
@@ -74,7 +76,7 @@ start.bat
 
 Либо напрямую через Java:
 ```bash
-java -jar target/konyaevo-bot-1.3.0.jar
+java -jar target/konyaevo-bot-2.2.1.jar
 ```
 
 ---
@@ -122,11 +124,12 @@ konyaevo-tver-help/
 │   ├── controller/
 │   │   └── ScheduleApiController.java   # REST API эндпоинты (/api/...)
 │   ├── dto/                             # DTO модели (расписание, аудитории, замены)
-│   ├── config/                          # BotConfig, WebConfig (CORS)
-│   ├── bot/                             # KonyaevoBot, KeyboardFactory, CallbackRouter
+│   ├── config/                          # WebConfig (CORS)
+│   ├── bot/                             # KonyaevoBot, TelegramRoutes, TelegramPoller, CallbackRouter
 │   ├── service/                         # ScheduleService, ScheduleParserService, ChangesParserService
 │   ├── model/                           # JPA сущности и модели
 │   └── repository/                      # UserSettingsRepository
+├── deploy/                              # Cloudflare Worker, смена VPN для xray
 ├── frontend/                            # Telegram Mini App (React + Vite + Tailwind)
 │   ├── functions/api/[[path]].ts        # Cloudflare Pages Functions HTTPS proxy
 │   ├── scripts/snapshot.cjs             # Выгрузка копии расписания для GitHub Pages
@@ -258,9 +261,10 @@ GIF или документ с подписью. Другой вариант: о
 переносится прошлая опубликованная копия. Профиль, уведомления, огонёк и
 отправка картинки работают только через сервер.
 
-Резервный адрес — Cloudflare Worker из `deploy/cloudflare-worker`. Он пересылает
-запросы на `BACKEND_URL` без изменений, поэтому подпись Telegram и CORS
-проверяет сам бэкенд:
+Резервный адрес — Cloudflare Worker из `deploy/cloudflare-worker`. Запросы `/api/*`
+он пересылает на `BACKEND_URL` без изменений, поэтому подпись Telegram и CORS
+проверяет сам бэкенд. Запросы `/bot*` уходят в `api.telegram.org`: этот же Worker
+служит маршрутом до Telegram для бота.
 
 ```bash
 cd deploy/cloudflare-worker
@@ -270,6 +274,71 @@ npx wrangler deploy
 Затем добавьте переменную репозитория `VITE_API_FALLBACK_URL` с адресом
 Worker (например, `https://konyaevo-api-proxy.<имя>.workers.dev`) или своим
 поддоменом, привязанным к Worker в Cloudflare.
+
+## Маршруты до Telegram и VPN
+
+Бот ходит в Telegram Bot API одним из двух маршрутов (`TelegramRoutes`):
+
+```
+BOT_BASE_URL=https://konyaevo-tver-helper-bot.ixlax.workers.dev/bot
+BOT_PROXY_TYPE=NO_PROXY
+BOT_FALLBACK_PROXY_TYPE=SOCKS5
+BOT_FALLBACK_PROXY_HOST=127.0.0.1
+BOT_FALLBACK_PROXY_PORT=10808
+```
+
+Здесь основной маршрут — Cloudflare Worker, запасной — `api.telegram.org` через
+локальный xray (адрес запасного маршрута по умолчанию `api.telegram.org`).
+Без `BOT_FALLBACK_*` бот работает одним маршрутом, как раньше.
+
+- Отправка сообщений переходит на запасной маршрут, только если до Telegram не
+  удалось подключиться (отказ соединения, недоступный прокси, страница шлюза
+  вместо ответа Telegram). Если Telegram ответил или соединение оборвалось после
+  отправки, запрос не повторяется: сообщение не придёт дважды.
+- Опрос обновлений (`TelegramPoller`) переключается при любой сетевой ошибке.
+- Пока бот работает через запасной маршрут, каждые 5 минут проверяется основной;
+  когда он отвечает, бот возвращается на него.
+- ImageKit пробует прокси маршрутов в том же порядке.
+- Опрос Telegram запускается в фоне после старта приложения. API и Mini App
+  поднимаются сразу, даже если Telegram недоступен; бот подключится, как только
+  ответит любой маршрут (повтор с паузой до 30 секунд).
+
+Проверка: `GET /api/health` возвращает `{"api":"ok","telegram":"ok","route":"primary"}`
+(`telegram: down`, если Telegram не отвечал больше 90 секунд; `route: fallback` —
+работает запасной маршрут). Команда `/stats` у администратора показывает активный
+маршрут. Переключения пишутся в журнал с меткой `[TELEGRAM ROUTE]`.
+
+Локальный xray настраивается из ссылки VPN. Ссылку `vless://` (её можно
+скопировать в Happ) положите в `.env` в одинарных кавычках — в ней есть `&` и `#`:
+
+```
+VPN_URL='vless://...'
+```
+
+Затем выполните из каталога бота от root:
+
+```bash
+./deploy/xray/set-vpn.sh
+```
+
+Скрипт собирает конфиг `/usr/local/etc/xray/config.json` (SOCKS5 `127.0.0.1:10808`,
+HTTP `127.0.0.1:10809`), проверяет его через `xray run -test`, сохраняет прежний
+конфиг рядом, перезапускает xray и проверяет доступ к Telegram. Если Telegram
+через новый VPN недоступен, прежний конфиг возвращается. Ссылку можно передать
+аргументом — скрипт запишет её в `.env`. `./deploy/xray/set-vpn.sh --check` только
+проверяет текущий VPN. Перезапускать бота после смены VPN не нужно.
+
+## Обновление до 2.2.1
+
+1. Обновите Worker кодом из `deploy/cloudflare-worker/worker.js` (маршруты `/api/*`
+   и `/bot*`).
+2. Добавьте в `.env` маршруты до Telegram и, при необходимости, `VPN_URL`
+   (раздел выше). Значения без кавычек, кроме `VPN_URL`.
+3. Соберите и запустите: `git pull`, `./mvnw clean package -DskipTests`,
+   `systemctl restart konyaevo-bot`. Схема базы не меняется.
+4. Проверьте `curl https://konyaevo-api.ixlax.space/api/health`.
+
+Тег релиза — `v2.2.1`.
 
 ## Обновление до 2.2.0
 
