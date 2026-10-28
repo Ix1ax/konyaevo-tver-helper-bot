@@ -552,7 +552,7 @@ public class CallbackRouter {
     }
 
     public void sendAdminStats(long chatId) {
-        String report = adminService.getStatsReport();
+        String report = adminService.getStatsReport() + "\n\nTelegram: <code>" + dev.ix1ax.main.util.HtmlUtils.escapeHtml(String.valueOf(messageSender.telegramRoute())) + "</code>";
         messageSender.sendDirectMessage(chatId, report, KeyboardFactory.buildAdminBackKeyboard());
     }
 
