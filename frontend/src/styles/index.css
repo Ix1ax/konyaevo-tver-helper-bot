@@ -252,3 +252,77 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .notification-status > svg { flex-shrink: 0; margin-top: 2px; }
 .notification-status.is-dirty > svg { color: var(--color-warning); }
 .notification-status.is-saved > svg, .notification-status.is-saving > svg { color: var(--color-accent); }
+
+/* Подсказка Парыча: маскот слева, текст справа, синий отсвет за фигурой. */
+.mascot-tip { position: relative; display: flex; align-items: center; gap: 4px; margin-bottom: 14px; padding: 10px 14px 10px 4px; border-radius: 22px; overflow: hidden; }
+.mascot-tip::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 12% 60%, rgba(61, 90, 254, .2), transparent 55%); pointer-events: none; }
+.mascot-tip-figure { flex-shrink: 0; margin: -6px 0 -10px; overflow: visible; }
+.mascot-tip-body { position: relative; z-index: 1; min-width: 0; }
+.mascot-tip-name { font-family: 'Unbounded', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #7d8fff; margin-bottom: 4px; }
+.theme-light .mascot-tip-name { color: var(--color-accent); }
+.mascot-tip-text { font-size: 13.5px; line-height: 1.45; font-weight: 500; overflow-wrap: anywhere; }
+.mascot-tip-text b { font-weight: 800; white-space: nowrap; }
+.mascot { overflow: visible; }
+.empty-state-mascot { display: block; margin: -12px auto 4px; }
+.loading-mascot { margin-bottom: -8px; }
+/* Цвет фона совпадает с первой отрисовкой из index.html, поэтому переход к приложению без вспышки. */
+.loading-state.loading-fullscreen { position: fixed; inset: 0; z-index: 55; min-height: 100dvh; padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+
+/* Огонёк Парыча в шапке. */
+.flame-chip { height: 36px; padding: 0 12px 0 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 800; color: var(--color-subtext); background: rgba(255, 255, 255, .05); border: 1px solid var(--color-border); transition: transform .15s; }
+.flame-chip svg { filter: grayscale(1) opacity(.55); }
+.flame-chip[data-counted] { color: #ffb347; background: rgba(255, 122, 43, .12); border-color: rgba(255, 140, 60, .3); }
+.flame-chip[data-counted] svg { filter: none; }
+.theme-light .flame-chip[data-counted] { color: #c2410c; background: #fff4e6; border-color: #ffd8a8; }
+.flame-chip:active { transform: scale(.95); }
+
+/* Экран Парыча. */
+.mascot-hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 4px; }
+.mascot-hero::before { content: ''; position: absolute; top: 0; width: 260px; height: 210px; background: radial-gradient(circle, rgba(255, 122, 43, .2), transparent 62%); pointer-events: none; }
+.mascot-hero > * { position: relative; }
+.mascot-streak { display: flex; align-items: center; gap: 6px; font-size: 44px; font-weight: 900; letter-spacing: -.03em; line-height: 1.1; margin-top: -4px; }
+.mascot-status { margin-top: 10px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--color-text); background: rgba(128, 140, 160, .12); }
+.mascot-card { border-radius: 22px; padding: 16px; margin-top: 18px; }
+.mascot-xp { color: #7d8fff; white-space: nowrap; }
+.theme-light .mascot-xp { color: var(--color-accent); }
+.mascot-bar { height: 10px; border-radius: 99px; background: rgba(128, 140, 160, .16); overflow: hidden; margin-top: 12px; }
+.mascot-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #3d5afe, #7d8fff); }
+.mascot-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
+.mascot-week > div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--color-subtext); }
+.mascot-week span { width: 100%; max-width: 38px; aspect-ratio: 1; border-radius: 12px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--color-border); background: rgba(128, 140, 160, .06); color: var(--color-subtext); }
+.mascot-week [data-state=done] span { background: rgba(255, 122, 43, .14); border-color: rgba(255, 140, 60, .35); }
+.mascot-week [data-state=freeze] span { background: rgba(96, 165, 250, .14); border-color: rgba(96, 165, 250, .35); color: #60a5fa; }
+.mascot-week [data-state=missed] span { opacity: .45; }
+.mascot-week [data-state=off] span { border-style: dashed; opacity: .6; }
+.mascot-week [data-today] { color: var(--color-text); }
+.mascot-week [data-today][data-state=done] span { background: linear-gradient(160deg, #ffb347, #ff5a36); border: none; box-shadow: 0 6px 18px rgba(255, 90, 54, .35); }
+.mascot-week [data-today][data-state=today] span { border: 2px dashed #ff8a3d; }
+.mascot-freezes { display: flex; align-items: flex-start; gap: 6px; margin-top: 14px; font-size: 12px; line-height: 1.45; color: var(--color-subtext); }
+.mascot-freezes svg { flex-shrink: 0; margin-top: 1px; color: #60a5fa; }
+.mascot-task { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.mascot-task + .mascot-task { border-top: 1px solid var(--color-border); }
+.mascot-check { width: 26px; height: 26px; border-radius: 9px; border: 2px solid var(--color-border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
+.mascot-check[data-done] { background: #3d5afe; border-color: #3d5afe; }
+.mascot-task-xp { margin-left: auto; font-size: 12px; font-weight: 700; color: #7d8fff; white-space: nowrap; }
+.theme-light .mascot-task-xp { color: var(--color-accent); }
+.mascot-looks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mascot-look { position: relative; border-radius: 18px; padding: 6px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--color-subtext); }
+.mascot-look[aria-pressed=true] { border-color: var(--color-accent); background-color: rgba(59, 130, 246, .14); color: var(--color-text); }
+.mascot-look:disabled { opacity: 1; }
+.mascot-look:disabled svg.mascot { filter: grayscale(1) brightness(.6); opacity: .55; }
+.mascot-lock { position: absolute; top: 30px; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--color-card); border: 1px solid var(--color-border); }
+.mascot-switch { appearance: none; -webkit-appearance: none; flex-shrink: 0; width: 46px; height: 28px; border-radius: 99px; background: var(--color-border); position: relative; transition: background-color .18s; cursor: pointer; }
+.mascot-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .18s; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+.mascot-switch:checked { background: var(--color-accent); }
+.mascot-switch:checked::after { transform: translateX(18px); }
+
+/* Награда Парыча. */
+.mascot-reward { position: relative; overflow: hidden; text-align: center; padding-top: 24px; }
+.mascot-reward::before { content: ''; position: absolute; inset: -40% -20% auto; height: 320px; background: radial-gradient(circle, rgba(255, 122, 43, .26), transparent 60%); pointer-events: none; }
+.mascot-reward > * { position: relative; }
+.mascot-confetti { position: absolute !important; width: 8px; height: 14px; border-radius: 2px; }
+.mascot-reward-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 16px 0 18px; }
+.mascot-reward-chips span { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; font-size: 13px; font-weight: 700; color: #9aa8ff; background: rgba(61, 90, 254, .15); }
+.mascot-reward-chips .mascot-reward-look { color: #ffb347; background: rgba(255, 154, 46, .14); }
+.theme-light .mascot-reward-chips span { color: var(--color-accent); }
+.theme-light .mascot-reward-chips .mascot-reward-look { color: #c2410c; }

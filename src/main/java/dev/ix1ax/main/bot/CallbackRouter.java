@@ -23,6 +23,7 @@ public class CallbackRouter {
     private final ScheduleService scheduleService;
     private final MessageSender messageSender;
     private final dev.ix1ax.main.service.AdminService adminService;
+    private final dev.ix1ax.main.service.MascotService mascot;
 
     public CallbackRouter(ScheduleService scheduleService,
                           MessageSender messageSender,
@@ -30,10 +31,17 @@ public class CallbackRouter {
         this(scheduleService, messageSender, adminService, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public CallbackRouter(ScheduleService scheduleService, MessageSender messageSender,
                           dev.ix1ax.main.service.AdminService adminService, dev.ix1ax.main.service.UserActivityService activity) {
+        this(scheduleService, messageSender, adminService, activity, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CallbackRouter(ScheduleService scheduleService, MessageSender messageSender,
+                          dev.ix1ax.main.service.AdminService adminService, dev.ix1ax.main.service.UserActivityService activity,
+                          dev.ix1ax.main.service.MascotService mascot) {
         this.activity = activity;
+        this.mascot = mascot;
         this.scheduleService = scheduleService;
         this.messageSender = messageSender;
         this.adminService = adminService;
@@ -49,6 +57,13 @@ public class CallbackRouter {
         int messageId = callback.getMessage().getMessageId();
 
         if (callback.getFrom().getId() != chatId) return;
+        // Кнопка из напоминания об огоньке: отдельное сообщение, не активность в расписании.
+        if (data.equals("mascot:reminder_off")) {
+            if (mascot != null) mascot.disableReminder(chatId);
+            messageSender.editMessage(chatId, messageId, "🔕 Хорошо, больше не напоминаю про огонёк.\n" +
+                    "Включить обратно можно на экране Парыча в приложении.", null);
+            return;
+        }
         UserSettings user = scheduleService.getOrCreateUser(chatId);
         if (activity != null) activity.record(chatId);
         // Старое сообщение не должно откатывать текущий профиль и настройки.

@@ -15,9 +15,14 @@ public class UserActivityService {
     private final ConcurrentHashMap<Long, Long> recorded = new ConcurrentHashMap<>();
     private volatile Snapshot cached;
     public record Snapshot(long day, long week, long month, long newWeek, long cachedAt) {}
-    public UserActivityService(UserActivityRepository repository) { this.repository = repository; }
+    private final MascotService mascot;
+    public UserActivityService(UserActivityRepository repository) { this(repository, null); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public UserActivityService(UserActivityRepository repository, MascotService mascot) { this.repository = repository; this.mascot = mascot; }
 
     public void record(long userId) {
+        // Огонёк проверяется до ограничения частоты: активность сразу после полуночи засчитывает новый день.
+        if (mascot != null) mascot.recordActivity(userId);
         long now = System.currentTimeMillis();
         Long previous = recorded.putIfAbsent(userId, now);
         if (previous != null && (now - previous < 300000 || !recorded.replace(userId, previous, now))) return;

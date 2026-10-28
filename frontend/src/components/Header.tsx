@@ -2,10 +2,13 @@ import React from 'react';
 import { RefreshCw, CalendarDays } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTelegram } from '../hooks/useTelegram';
+import { useMascot } from '../context/MascotContext';
+import { FlameIcon } from './Mascot';
 
 export function Header({ title, showGreeting = true, action }: { title?: string; showGreeting?: boolean; action?: React.ReactNode }) {
   const { role, selectedGroup, selectedTeacher, info, refreshing, refreshAll, setActiveTab } = useApp();
   const { user, haptic } = useTelegram();
+  const { mascot } = useMascot();
   const name = (role === 'student' ? selectedGroup : selectedTeacher) || 'Выбрать';
   const initial = user?.first_name ? user.first_name.charAt(0).toUpperCase() : (name.charAt(0) || 'К');
 
@@ -13,11 +16,13 @@ export function Header({ title, showGreeting = true, action }: { title?: string;
     photoUrl={user?.photo_url} red={info.isRedWeek} refreshing={refreshing}
     onProfile={() => { haptic.impact('light'); setActiveTab('profile'); }}
     onWeek={() => { haptic.impact('light'); setActiveTab('week'); }}
-    onRefresh={() => { haptic.impact('light'); refreshAll(); }} />;
+    onRefresh={() => { haptic.impact('light'); refreshAll(); }}
+    streak={mascot?.streak} streakCounted={mascot?.countedToday} onStreak={() => setActiveTab('mascot')} />;
 }
 
 export function HeaderContent({title, showGreeting = true, action, name, initial = 'К', photoUrl, red = false, refreshing = false, hideAvatar = false, subtitle, identityLabel,
-  onProfile = () => {}, onWeek = () => {}, onRefresh = () => {}}: {
+  streak, streakCounted = false, onStreak = () => {}, onProfile = () => {}, onWeek = () => {}, onRefresh = () => {}}: {
+  streak?: number; streakCounted?: boolean; onStreak?: () => void;
   title?: string; showGreeting?: boolean; action?: React.ReactNode; name: string; initial?: string; photoUrl?: string;
   identityLabel?: string; hideAvatar?: boolean; subtitle?: string; red?: boolean; refreshing?: boolean; onProfile?: () => void; onWeek?: () => void; onRefresh?: () => void;
 }) {
@@ -48,6 +53,11 @@ export function HeaderContent({title, showGreeting = true, action, name, initial
           <p className="schedule-identity-name">{name}</p>
         </div>}
 
+        <div className="flex items-center gap-2">
+        {streak !== undefined && <button className="flame-chip font-unbounded" data-counted={streakCounted || undefined}
+          onClick={onStreak} aria-label={`Огонёк: ${streak} дней подряд. Открыть Парыча`}>
+          <FlameIcon size={18} />{streak}
+        </button>}
         {/* Circular Avatar */}
         {!hideAvatar && <button
           onClick={onProfile}
@@ -65,6 +75,7 @@ export function HeaderContent({title, showGreeting = true, action, name, initial
             <span>{initial}</span>
           )}
         </button>}
+        </div>
       </div>
 
       {/* Main Title Row with Square Action Buttons */}

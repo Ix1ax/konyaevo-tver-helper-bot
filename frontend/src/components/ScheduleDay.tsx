@@ -2,11 +2,12 @@ import { Header } from './Header';
 import { SummaryCard } from './SummaryCard';
 import { LessonCard } from './LessonCard';
 import { EmptyState } from './Ui';
+import { MascotTip } from './MascotTip';
 import { ArrowRightLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export function ScheduleDay({ tomorrow = false }: { tomorrow?: boolean }) {
-  const { schedule, info, setActiveTab } = useApp();
+  const { schedule, info, role, setActiveTab } = useApp();
   const day = tomorrow ? info.tomorrowName : info.todayName;
   const red = tomorrow ? (info.tomorrowRedWeek ?? info.isRedWeek) : info.isRedWeek;
   const lessons = (schedule[day]?.lessons || []).filter((lesson) => !lesson.weekType || lesson.weekType === (red ? 'red' : 'blue'));
@@ -25,10 +26,11 @@ export function ScheduleDay({ tomorrow = false }: { tomorrow?: boolean }) {
           <ChevronRight size={16} className="opacity-50" />
         </button>
       )}
+      <MascotTip lessons={lessons} role={role} tomorrow={tomorrow} />
       <SummaryCard lessons={lessons} dayName={day} />
       {lessons.length ? lessons.map((lesson, index) => <LessonCard key={`${lesson.lessonNumber}-${lesson.groupName}-${index}`} lesson={lesson} highlightCurrent={!tomorrow} />)
-        : <EmptyState>На этот день занятий не запланировано.</EmptyState>}
-    </> : <><EmptyState title="Выходной">Занятий нет. Расписание на другие дни доступно во вкладке «Неделя».</EmptyState>
+        : <EmptyState mascot>На этот день занятий не запланировано.</EmptyState>}
+    </> : <><EmptyState mascot title="Выходной">Занятий нет. Расписание на другие дни доступно во вкладке «Неделя».</EmptyState>
       <button className="button-quiet w-full" onClick={() => setActiveTab('week')}>Расписание на неделю</button></>}
   </div>;
 }
