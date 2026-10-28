@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, ChevronRight, ArrowLeft, Check, UserRound } from 'lucide-react';
 import { Header } from '../components/Header';
 import { LessonCard } from '../components/LessonCard';
@@ -7,6 +7,7 @@ import { LoadingIndicator, EmptyState, IconBadge } from '../components/Ui';
 import { useApp } from '../context/AppContext';
 import { api, profileRequest } from '../api/client';
 import { SEARCH_TABS, TabSwitch } from '../components/TabSwitch';
+import { Pager, usePage } from '../components/Pager';
 import type { ScheduleMap } from '../types';
 
 const DAYS = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'];
@@ -31,6 +32,8 @@ export function TeachersView() {
   }, [teacher]);
   const teachers = teachersData.teachers.filter((name) => query.trim()
     ? name.toLowerCase().includes(query.trim().toLowerCase()) : !letter || name.startsWith(letter));
+  const list = useRef<HTMLDivElement>(null);
+  const paged = usePage(teachers, 12, `${query.trim()}|${letter}`);
   const lessons = (schedule[day]?.lessons || []).filter((lesson) => !lesson.weekType || lesson.weekType === (info.isRedWeek ? 'red' : 'blue'));
   async function chooseTeacher() {
     if (!teacher) return;
@@ -62,9 +65,10 @@ export function TeachersView() {
         {['', ...teachersData.letters].map((value) => <button className="choice" key={value} aria-pressed={letter === value}
           onClick={() => { setLetter(value); setQuery(''); }}>{value || 'Все'}</button>)}
       </div>
-      <div className="settings-group">{teachers.map((name) => <button key={name} className="settings-row" onClick={() => setTeacher(name)}>
+      <div ref={list} className="settings-group scroll-mt-4">{paged.items.map((name) => <button key={name} className="settings-row" onClick={() => setTeacher(name)}>
         <span className="flex-1 text-sm">{name}</span><ChevronRight className="text-theme-subtext" />
       </button>)}</div>
+      <Pager {...paged} anchor={list} label="Страницы списка преподавателей" />
       {!teachers.length && <EmptyState title="Ничего не найдено">Попробуйте изменить запрос.</EmptyState>}
     </>}
   </div>;

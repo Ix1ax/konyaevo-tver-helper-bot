@@ -357,3 +357,14 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .tab-switch button { min-height: 36px; border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--color-subtext); transition: background .15s, color .15s; }
 .tab-switch button[aria-selected=true] { color: var(--color-text); background: var(--color-card); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
 @media (prefers-reduced-motion: reduce) { .nav-parych[data-waiting] .nav-parych-orb::after { animation: none; opacity: .8; } }
+
+/* Пагинация длинных списков: преподаватели, аудитории. */
+.pager { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; gap: 8px; margin-top: 12px; }
+.pager-pages { display: flex; justify-content: center; gap: 3px; min-width: 0; }
+.pager-pages button, .pager-step { height: 36px; min-width: 32px; padding: 0 4px; border-radius: 11px; font-size: 13px; font-weight: 700; color: var(--color-subtext); border: 1px solid var(--color-border); background: var(--color-card); transition: transform .12s, background .15s; }
+.pager-pages button:active, .pager-step:active { transform: scale(.94); }
+.pager-pages button[aria-current=page] { color: #fff; background: var(--color-accent); border-color: var(--color-accent); box-shadow: 0 4px 12px rgba(59, 130, 246, .3); }
+.pager-step { display: grid; place-items: center; color: var(--color-text); }
+.pager-step:disabled { opacity: .35; }
+.pager-gap { width: 18px; text-align: center; align-self: center; color: var(--color-subtext); }
+.pager-range { grid-column: 1 / -1; text-align: center; font-size: 11px; font-weight: 600; color: var(--color-subtext); }

@@ -8,11 +8,13 @@ process.on('exit', () => fs.rmSync(output, { recursive: true, force: true }));
 execFileSync(process.execPath, [require.resolve('typescript/bin/tsc'),
   path.join(__dirname, '../src/utils/calendar.ts'), path.join(__dirname, '../src/utils/requestCache.ts'),
   path.join(__dirname, '../src/utils/mascotTip.ts'), path.join(__dirname, '../src/utils/snapshot.ts'),
+  path.join(__dirname, '../src/utils/pagination.ts'),
   '--target', 'ES2020', '--module', 'commonjs', '--rootDir', path.join(__dirname, '../src'), '--outDir', output, '--skipLibCheck'], { stdio: 'inherit' });
 const { selectedWeekDate, moscowDayDate } = require(path.join(output, 'utils', 'calendar.js'));
 const { RequestCache } = require(path.join(output, 'utils', 'requestCache.js'));
 const { mascotTip } = require(path.join(output, 'utils', 'mascotTip.js'));
 const { snapshotFile, nameHash, weekType, liveInfo } = require(path.join(output, 'utils', 'snapshot.js'));
+const { pageWindow, pageRange } = require(path.join(output, 'utils', 'pagination.js'));
 
 async function main() {
   assert.equal(selectedWeekDate('Понедельник', '2026-09-30T12:00:00+03:00'), '28.09.2026');
@@ -92,6 +94,15 @@ async function main() {
   assert.deepEqual([saturday.todayName, saturday.tomorrowName], ['', '']);
   assert.equal(liveInfo({ changesDate: '' }, new Date('2026-11-01T10:00:00Z')).tomorrowName, 'Понедельник');
   assert.equal(liveInfo({ changesDate: '' }, new Date('2026-11-01T10:00:00Z')).tomorrowRedWeek, false);
-  console.log('Frontend helpers: даты выбранной недели, кеш, повторный запрос, сброс, подсказки маскота и копия расписания — проверки пройдены.');
+  assert.deepEqual(pageWindow(0, 1), [0]);
+  assert.deepEqual(pageWindow(3, 7), [0, 1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(pageWindow(0, 10), [0, 1, 2, 3, null, 9]);
+  assert.deepEqual(pageWindow(5, 10), [0, null, 4, 5, 6, null, 9]);
+  assert.deepEqual(pageWindow(9, 10), [0, null, 6, 7, 8, 9]);
+  assert.deepEqual(pageWindow(2, 8), [0, 1, 2, 3, null, 7]);
+  assert.deepEqual(pageWindow(3, 10), [0, 1, 2, 3, 4, null, 9]);
+  assert.equal(pageRange(1, 12, 75), '13–24 из 75');
+  assert.equal(pageRange(6, 12, 75), '73–75 из 75');
+  console.log('Frontend helpers: даты выбранной недели, кеш, повторный запрос, сброс, подсказки маскота, копия расписания и страницы списков — проверки пройдены.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
