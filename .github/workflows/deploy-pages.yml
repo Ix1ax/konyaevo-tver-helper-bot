@@ -7,6 +7,9 @@ on:
       - "frontend/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
+  # Копия расписания на Pages обновляется каждые полчаса: она нужна, когда сервер API недоступен из сети пользователя.
+  schedule:
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: read
@@ -54,6 +57,14 @@ jobs:
           # Необязательный резервный адрес API (Cloudflare Worker из deploy/cloudflare-worker).
           VITE_API_FALLBACK_URL: ${{ vars.VITE_API_FALLBACK_URL }}
         run: npm run build
+
+      - name: Publish schedule copy
+        working-directory: ./frontend
+        continue-on-error: true
+        env:
+          SNAPSHOT_API_URL: ${{ vars.VITE_API_URL }}
+          PREVIOUS_SNAPSHOT_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/
+        run: node scripts/snapshot.cjs dist/data
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

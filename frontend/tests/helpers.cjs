@@ -7,11 +7,12 @@ const output = fs.mkdtempSync(path.join(os.tmpdir(), 'konyaevo-helpers-'));
 process.on('exit', () => fs.rmSync(output, { recursive: true, force: true }));
 execFileSync(process.execPath, [require.resolve('typescript/bin/tsc'),
   path.join(__dirname, '../src/utils/calendar.ts'), path.join(__dirname, '../src/utils/requestCache.ts'),
-  path.join(__dirname, '../src/utils/mascotTip.ts'),
+  path.join(__dirname, '../src/utils/mascotTip.ts'), path.join(__dirname, '../src/utils/snapshot.ts'),
   '--target', 'ES2020', '--module', 'commonjs', '--rootDir', path.join(__dirname, '../src'), '--outDir', output, '--skipLibCheck'], { stdio: 'inherit' });
 const { selectedWeekDate, moscowDayDate } = require(path.join(output, 'utils', 'calendar.js'));
 const { RequestCache } = require(path.join(output, 'utils', 'requestCache.js'));
 const { mascotTip } = require(path.join(output, 'utils', 'mascotTip.js'));
+const { snapshotFile, nameHash, weekType, liveInfo } = require(path.join(output, 'utils', 'snapshot.js'));
 
 async function main() {
   assert.equal(selectedWeekDate('Понедельник', '2026-09-30T12:00:00+03:00'), '28.09.2026');
@@ -65,6 +66,32 @@ async function main() {
   assert.equal(mascotTip(gap, at(10, 30), 'student').text, 'Перерыв до **12:10**. Дальше — Физика в **каб. 101 / 102**.');
   assert.equal(mascotTip([{ ...day[0], groupName: 'ИСп-21' }], at(8, 25), 'teacher').text, 'Через **5 мин** — МДК 01.01 у ИСп-21 в **каб. 305**. Успеваешь?');
   assert.equal(mascotTip([day[0]], null, 'student').text, 'Завтра 1 пара, первая в **08:30** — МДК 01.01 в **каб. 305**.');
-  console.log('Frontend helpers: даты выбранной недели, кеш, повторный запрос, сброс и подсказки маскота — проверки пройдены.');
+  // Копия расписания: пути API и пересчёт дня по часам телефона.
+  assert.equal(snapshotFile('/info'), 'info.json');
+  assert.equal(snapshotFile('/groups'), 'groups.json');
+  assert.equal(snapshotFile(`/schedule/group/${encodeURIComponent('ИСп-21')}`), `g/${nameHash('ИСп-21')}.json`);
+  assert.equal(snapshotFile(`/schedule/base/teacher/${encodeURIComponent('Иванова А.С.')}`), `bt/${nameHash('Иванова А.С.')}.json`);
+  assert.equal(snapshotFile(`/changes/group/${encodeURIComponent('1-БД')}`), `c/${nameHash('1-БД')}.json`);
+  assert.equal(snapshotFile(`/classrooms/free?day=${encodeURIComponent('Среда')}&slot=2&weekType=red`), 'rooms/2-2-red.json');
+  assert.equal(snapshotFile('/classrooms/free?day=Суббота&slot=2&weekType=red'), 'rooms/5-2-red.json');
+  assert.equal(snapshotFile('/classrooms/free?day=Среда&slot=2&weekType=current'), null);
+  assert.equal(snapshotFile('/profile'), null);
+  assert.equal(snapshotFile('/mascot/event'), null);
+  assert.equal(nameHash('ИСп-21'), nameHash('ИСп-21'));
+  assert.notEqual(nameHash('ИСп-21'), nameHash('ИСп-22'));
+  // Совпадает с AcademicWeek на сервере: 28.10.2026 — красная, 2.11 — синяя, 2.02.2027 — красная (начало семестра).
+  assert.equal(weekType(new Date(Date.UTC(2026, 9, 28))), 'red');
+  assert.equal(weekType(new Date(Date.UTC(2026, 10, 2))), 'blue');
+  assert.equal(weekType(new Date(Date.UTC(2027, 1, 2))), 'red');
+  assert.equal(weekType(new Date(Date.UTC(2027, 0, 15))), weekType(new Date(Date.UTC(2027, 0, 11))));
+  const wednesday = liveInfo({ changesDate: '28.10' }, new Date('2026-10-28T08:00:00Z'));
+  assert.deepEqual([wednesday.todayName, wednesday.tomorrowName, wednesday.isRedWeek, wednesday.tomorrowRedWeek, wednesday.changesDate],
+    ['Среда', 'Четверг', true, true, '28.10']);
+  assert.equal(liveInfo({ changesDate: '' }, new Date('2026-10-28T21:30:00Z')).todayName, 'Четверг');
+  const saturday = liveInfo({ changesDate: '' }, new Date('2026-10-31T10:00:00Z'));
+  assert.deepEqual([saturday.todayName, saturday.tomorrowName], ['', '']);
+  assert.equal(liveInfo({ changesDate: '' }, new Date('2026-11-01T10:00:00Z')).tomorrowName, 'Понедельник');
+  assert.equal(liveInfo({ changesDate: '' }, new Date('2026-11-01T10:00:00Z')).tomorrowRedWeek, false);
+  console.log('Frontend helpers: даты выбранной недели, кеш, повторный запрос, сброс, подсказки маскота и копия расписания — проверки пройдены.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

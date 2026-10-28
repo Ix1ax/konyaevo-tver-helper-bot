@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageCircle, RefreshCw, WifiOff } from 'lucide-react';
+import { CloudOff, MessageCircle, RefreshCw, WifiOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTelegram } from '../hooks/useTelegram';
 
@@ -28,5 +28,22 @@ export function LoadErrorNotice({ message }: { message: string }) {
       </button>
       <button className="button-quiet" onClick={openChat}><MessageCircle size={16} aria-hidden="true" />Расписание в чате</button>
     </div>
+  </div>;
+}
+
+const copyTime = (iso: string) => {
+  const date = new Date(iso);
+  const day = (d: Date) => d.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+  const time = date.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
+  return day(date) === day(new Date()) ? time : `${date.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long' })}, ${time}`;
+};
+
+/** Сервер недоступен, но расписание показано из копии на GitHub Pages. */
+export function OfflineCopyNotice({ at }: { at: string }) {
+  const { refreshAll, refreshing } = useApp();
+  return <div className="offline-copy" role="status">
+    <CloudOff size={18} aria-hidden="true" />
+    <p>Сервер недоступен — показана копия расписания от <b>{copyTime(at)}</b>. Свежие замены могут не попасть.</p>
+    <button onClick={refreshAll} disabled={refreshing} aria-label="Обновить"><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /></button>
   </div>;
 }

@@ -12,7 +12,7 @@ import { FeedbackPrompt } from './components/FeedbackPrompt';
 import { ChatVersionNotice, hasSeenChatNotice } from './components/ChatVersionNotice';
 import { useTelegram } from './hooks/useTelegram';
 import { EmptyState, LoadingIndicator } from './components/Ui';
-import { LoadErrorNotice } from './components/LoadErrorNotice';
+import { LoadErrorNotice, OfflineCopyNotice } from './components/LoadErrorNotice';
 
 import AdminView from './views/AdminView';
 import { MascotView } from './views/MascotView';
@@ -24,7 +24,7 @@ export function App() {
   const noticeKey = `konyaevo:chat-notice:v1:${user?.id ?? 'browser'}`;
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
   const noticeOpen = dismissedNotice !== noticeKey && !hasSeenChatNotice(noticeKey);
-  const { activeTab, setActiveTab, loadError, loading, role, selectedGroup, selectedTeacher, isAdmin, refreshing } = useApp();
+  const { activeTab, setActiveTab, loadError, offlineAt, loading, role, selectedGroup, selectedTeacher, isAdmin, refreshing } = useApp();
   const views = { today: TodayView, tomorrow: TomorrowView, week: WeekView, classrooms: ClassroomsView,
     teachers: TeachersView, changes: ChangesView, profile: ProfileView, admin: AdminView, mascot: MascotView };
   const View = views[activeTab];
@@ -34,6 +34,7 @@ export function App() {
   return <div className={`app-shell min-h-screen text-theme-text has-share-navigation ${isAdmin ? 'has-admin-navigation' : ''}`}>
     <main className={`max-w-lg mx-auto min-h-screen ${isAdmin ? 'pb-28' : 'pb-14'}`}>
       {refreshing && <LoadingIndicator compact label="Обновляем расписание…" />}
+      {offlineAt && !loadError && !loading && <div className="px-5 pt-4"><OfflineCopyNotice at={offlineAt} /></div>}
       {loadError && !loading && !needsProfile && <div className="px-5 pt-5"><LoadErrorNotice message={loadError} /></div>}
       {loading ? <LoadingIndicator fullscreen /> : needsProfile && loadError
         ? <div className="page"><LoadErrorNotice message={loadError} /></div>

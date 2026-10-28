@@ -1,4 +1,5 @@
 import { RequestCache } from '../utils/requestCache';
+import { liveInfo, snapshotFile } from '../utils/snapshot';
 const catalogs = new RequestCache();
 import {
   ClassroomsResponse,
@@ -112,11 +113,66 @@ export async function signedRequest<T>(path: string, body?: unknown): Promise<T>
   return await response.json();
 }
 
-// Открытый GET-запрос к API с JSON-ответом.
+// Копия расписания публикуется вместе с приложением (scripts/snapshot.cjs).
+const SNAPSHOT_BASE = `${import.meta.env.BASE_URL}data/`;
+let snapshotAt: string | null = null;
+let snapshotMeta: Promise<string | null> | null = null;
+
+/** Время копии, если последние данные пришли из неё, а не с сервера. */
+export function getSnapshotTime(): string | null { return snapshotAt; }
+
+async function fromSnapshot<T>(path: string): Promise<T> {
+  const searching = path.startsWith('/teachers/search?');
+  const file = searching ? 'teachers.json' : snapshotFile(path);
+  if (!file) throw new ApiUnavailableError();
+  const response = await fetch(SNAPSHOT_BASE + file, { cache: 'no-cache' }).catch(() => null);
+  if (!response?.ok) throw new ApiUnavailableError();
+  const data = await response.json();
+  snapshotMeta ??= fetch(SNAPSHOT_BASE + 'meta.json', { cache: 'no-cache' })
+    .then(r => r.ok ? r.json() : null).then(meta => meta?.generatedAt ?? null).catch(() => null);
+  snapshotAt = await snapshotMeta ?? new Date().toISOString();
+  if (path === '/info') return liveInfo(data) as T;
+  if (searching) {
+    const query = (new URLSearchParams(path.split('?')[1]).get('q') || '').trim().toLowerCase();
+    return (data as TeachersResponse).teachers.filter(name => name.toLowerCase().includes(query)) as T;
+  }
+  return data as T;
+}
+
+const COPY_AFTER_MS = 5000, COPY_FOR_MS = 60000;
+let apiDownUntil = 0;
+const hasCopy = (path: string) => path.startsWith('/teachers/search?') || snapshotFile(path) !== null;
+
+/**
+ * Открытый GET-запрос: если сервер не ответил за 5 секунд или недоступен, отдаём копию, а запрос
+ * к серверу продолжается в фоне. Пока сервер считается недоступным, следующие запросы сразу идут в копию.
+ */
 async function getJson<T>(path: string): Promise<T> {
-  const res = await apiFetch(path);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as T;
+  if (hasCopy(path) && Date.now() < apiDownUntil) {
+    try { return await fromSnapshot<T>(path); } catch { /* Копии нет — пробуем сервер. */ }
+  }
+  const live = (async () => {
+    const res = await apiFetch(path);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as T;
+    apiDownUntil = 0;
+    snapshotAt = null;
+    return data;
+  })();
+  if (!hasCopy(path)) return live;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false, liveFailed = false, copy: Promise<void> | null = null;
+    const finish = (settle: () => void) => { if (!settled) { settled = true; settle(); } };
+    const useCopy = () => copy ??= fromSnapshot<T>(path).then(
+      data => { apiDownUntil = Date.now() + COPY_FOR_MS; finish(() => resolve(data)); },
+      () => { copy = null; if (liveFailed) finish(() => reject(new ApiUnavailableError())); });
+    const timer = setTimeout(useCopy, COPY_AFTER_MS);
+    live.then(data => { clearTimeout(timer); finish(() => resolve(data)); }, error => {
+      liveFailed = true;
+      clearTimeout(timer);
+      if (error instanceof ApiUnavailableError) useCopy(); else finish(() => reject(error));
+    });
+  });
 }
 
 // Сетевую ошибку пробрасываем как есть: интерфейс показывает для неё отдельную подсказку.
