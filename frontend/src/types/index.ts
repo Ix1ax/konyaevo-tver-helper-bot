@@ -81,3 +81,26 @@ export interface ClassroomsResponse {
   occupiedRooms: ClassroomOccupied[];
   allRooms: string[];
 }
+
+export type MascotLookId = 'classic' | 'autumn' | 'winter' | 'spring' | 'summer' | 'graduate';
+
+/** Огонёк и прогресс Парыча, считается на сервере по московскому времени. */
+export interface MascotState {
+  streak: number;
+  best: number;
+  freezes: number;
+  maxFreezes: number;
+  countedToday: boolean;
+  studyDay: boolean;
+  week: { label: string; state: 'done' | 'freeze' | 'missed' | 'today' | 'future' | 'off' }[];
+  xp: number;
+  level: number;
+  levelName: string;
+  levelXp: number;
+  nextLevelXp: number;
+  tasks: { id: string; title: string; hint: string | null; xp: number; done: boolean }[];
+  look: MascotLookId;
+  looks: { id: MascotLookId; name: string; level: number; unlocked: boolean }[];
+  reminder: boolean;
+  rewards: { type: 'streak' | 'level'; value: number; look: MascotLookId | null }[];
+}

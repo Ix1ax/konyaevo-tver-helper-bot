@@ -252,3 +252,16 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .notification-status > svg { flex-shrink: 0; margin-top: 2px; }
 .notification-status.is-dirty > svg { color: var(--color-warning); }
 .notification-status.is-saved > svg, .notification-status.is-saving > svg { color: var(--color-accent); }
+
+/* Подсказка Парыча: маскот слева, текст справа, синий отсвет за фигурой. */
+.mascot-tip { position: relative; display: flex; align-items: center; gap: 4px; margin-bottom: 14px; padding: 10px 14px 10px 4px; border-radius: 22px; overflow: hidden; }
+.mascot-tip::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 12% 60%, rgba(61, 90, 254, .2), transparent 55%); pointer-events: none; }
+.mascot-tip-figure { flex-shrink: 0; margin: -6px 0 -10px; overflow: visible; }
+.mascot-tip-body { position: relative; z-index: 1; min-width: 0; }
+.mascot-tip-name { font-family: 'Unbounded', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #7d8fff; margin-bottom: 4px; }
+.theme-light .mascot-tip-name { color: var(--color-accent); }
+.mascot-tip-text { font-size: 13.5px; line-height: 1.45; font-weight: 500; overflow-wrap: anywhere; }
+.mascot-tip-text b { font-weight: 800; white-space: nowrap; }
+.mascot { overflow: visible; }
+.empty-state-mascot { display: block; margin: -12px auto 4px; }
+.loading-mascot { margin-bottom: -8px; }
