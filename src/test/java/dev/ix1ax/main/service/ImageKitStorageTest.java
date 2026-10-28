@@ -38,7 +38,7 @@ class ImageKitStorageTest {
             }
             return response;
         });
-        var storage = new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://ik.imagekit.io/test", "NO_PROXY", "localhost", 10808);
+        var storage = new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://ik.imagekit.io/test", List.of(java.net.Proxy.NO_PROXY));
         org.springframework.test.util.ReflectionTestUtils.setField(storage, "http", http);
         var result = storage.upload(new byte[]{1,2,3}, "unique");
         assertEquals("file-123", result.fileId());
@@ -48,7 +48,7 @@ class ImageKitStorageTest {
         assertTrue(auth.get().startsWith("Basic "));
         verify(repository).save(argThat(item -> item.getFileId().equals("file-123") && item.getExpiresAt() == result.expiresAt()));
         when(repository.findTop50ByExpiresAtLessThanOrderByExpiresAtAsc(anyLong())).thenReturn(List.of(new SharedImage("file-123", 0)));
-        var restarted = new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://ik.imagekit.io/test", "NO_PROXY", "localhost", 10808);
+        var restarted = new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://ik.imagekit.io/test", List.of(java.net.Proxy.NO_PROXY));
         org.springframework.test.util.ReflectionTestUtils.setField(restarted, "http", http);
         restarted.clearExpired();
         assertTrue(deleted.get().endsWith("/v1/files/file-123"));
@@ -62,17 +62,35 @@ class ImageKitStorageTest {
         when(response.statusCode()).thenReturn(503);
         when(response.body()).thenReturn("");
         when(http.send(any(java.net.http.HttpRequest.class), any(java.net.http.HttpResponse.BodyHandler.class))).thenReturn(response);
-        var storage = new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://ik.imagekit.io/test", "NO_PROXY", "localhost", 10808);
+        var storage = new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://ik.imagekit.io/test", List.of(java.net.Proxy.NO_PROXY));
         org.springframework.test.util.ReflectionTestUtils.setField(storage, "http", http);
         storage.clearExpired();
         verify(repository, never()).deleteById(anyString());
     }
     @Test void missingKeyDisablesStorageAndInvalidEndpointFailsClearly() {
         var repository = mock(SharedImageRepository.class);
-        var storage = new ImageKitStorage(new ObjectMapper(), repository, "", "", "NO_PROXY", "localhost", 10808);
+        var storage = new ImageKitStorage(new ObjectMapper(), repository, "", "", List.of());
         assertFalse(storage.enabled());
         storage.clearExpired();
         verifyNoInteractions(repository);
-        assertThrows(IllegalArgumentException.class, () -> new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://wrong.example", "NO_PROXY", "localhost", 10808));
+        assertThrows(IllegalArgumentException.class, () -> new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://wrong.example", List.of()));
+        // Кавычки из .env (spring-dotenv их не снимает) не ломают проверку адреса.
+        assertTrue(new ImageKitStorage(new ObjectMapper(), repository, "'private-test'", "'https://ik.imagekit.io/test'", List.of()).enabled());
+    }
+    @Test void unreachableProxyFallsBackToNextRoute() throws Exception {
+        var repository = mock(SharedImageRepository.class);
+        when(repository.findTop50ByExpiresAtLessThanOrderByExpiresAtAsc(anyLong())).thenReturn(List.of(new SharedImage("via-next", 0)));
+        var http = mock(java.net.http.HttpClient.class);
+        var response = mock(java.net.http.HttpResponse.class);
+        when(response.statusCode()).thenReturn(204);
+        when(response.body()).thenReturn("");
+        when(http.send(any(java.net.http.HttpRequest.class), any(java.net.http.HttpResponse.BodyHandler.class))).thenReturn(response);
+        int closedPort;
+        try (var socket = new java.net.ServerSocket(0)) { closedPort = socket.getLocalPort(); }
+        var deadProxy = new java.net.Proxy(java.net.Proxy.Type.HTTP, new InetSocketAddress("127.0.0.1", closedPort));
+        var storage = new ImageKitStorage(new ObjectMapper(), repository, "private-test", "https://ik.imagekit.io/test", List.of(deadProxy, java.net.Proxy.NO_PROXY));
+        org.springframework.test.util.ReflectionTestUtils.setField(storage, "http", http);
+        storage.clearExpired();
+        verify(repository).deleteById("via-next");
     }
 }

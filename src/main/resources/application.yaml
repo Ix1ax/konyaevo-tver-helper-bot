@@ -11,6 +11,13 @@ bot:
     type: ${BOT_PROXY_TYPE:NO_PROXY}
     host: ${BOT_PROXY_HOST:127.0.0.1}
     port: ${BOT_PROXY_PORT:10808}
+  # Запасной маршрут до Telegram: включается, если задан адрес или тип прокси.
+  fallback:
+    base-url: ${BOT_FALLBACK_BASE_URL:}
+    proxy:
+      type: ${BOT_FALLBACK_PROXY_TYPE:NO_PROXY}
+      host: ${BOT_FALLBACK_PROXY_HOST:127.0.0.1}
+      port: ${BOT_FALLBACK_PROXY_PORT:10808}
   admin-ids: ${BOT_ADMIN_IDS:1669683599}
 
 schedule:

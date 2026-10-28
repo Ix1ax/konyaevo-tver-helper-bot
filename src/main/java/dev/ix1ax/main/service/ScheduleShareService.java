@@ -5,10 +5,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import dev.ix1ax.main.bot.TelegramRoutes;
 import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
-import java.net.URI;
-import java.net.http.*;
 import java.time.Duration;
 import java.util.*;
 
@@ -21,35 +20,18 @@ public class ScheduleShareService {
     private static final long MAX_CACHE_BYTES = 325_000_000L;
     private final Map<String, Image> images = new LinkedHashMap<>();
     private final ObjectMapper json;
-    private final String token, apiBase, publicBase, username;
-    private java.net.Proxy proxy = java.net.Proxy.NO_PROXY;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    private final String publicBase, username;
+    private final TelegramRoutes telegram;
     record Image(byte[] bytes, long user, long created, long expires) {}
     @org.springframework.beans.factory.annotation.Autowired
     private ImageKitStorage storage;
     public record Prepared(String id, String imageUrl, long expiresAt) {}
 
-    public ScheduleShareService(ObjectMapper json, @Value("${bot.token}") String token,
-            @Value("${bot.base-url:https://api.telegram.org/bot}") String apiBase,
+    public ScheduleShareService(ObjectMapper json, TelegramRoutes telegram,
             @Value("${share.public-api-url:https://konyaevo-api.ixlax.space/api}") String publicBase,
             @Value("${bot.username:konyaevo_tver_helper_bot}") String username) {
-        this.json = json; this.token = token; this.apiBase = apiBase;
+        this.json = json; this.telegram = telegram;
         this.publicBase = publicBase.replaceAll("/$", ""); this.username = username;
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public ScheduleShareService(ObjectMapper json, @Value("${bot.token}") String token,
-            @Value("${bot.base-url:https://api.telegram.org/bot}") String apiBase,
-            @Value("${share.public-api-url:https://konyaevo-api.ixlax.space/api}") String publicBase,
-            @Value("${bot.username:konyaevo_tver_helper_bot}") String username,
-            @Value("${bot.proxy.type:NO_PROXY}") String proxyType,
-            @Value("${bot.proxy.host:127.0.0.1}") String proxyHost,
-            @Value("${bot.proxy.port:10808}") int proxyPort) {
-        this(json, token, apiBase, publicBase, username);
-        if ("SOCKS5".equalsIgnoreCase(proxyType) || "SOCKS4".equalsIgnoreCase(proxyType))
-            proxy = new java.net.Proxy(java.net.Proxy.Type.SOCKS, new java.net.InetSocketAddress(proxyHost, proxyPort));
-        else if ("HTTP".equalsIgnoreCase(proxyType))
-            proxy = new java.net.Proxy(java.net.Proxy.Type.HTTP, new java.net.InetSocketAddress(proxyHost, proxyPort));
     }
 
     @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
@@ -120,39 +102,20 @@ public class ScheduleShareService {
             log.warn("[SCHEDULE SHARE] ImageKit preparation failed image={} error={}", id, e.getClass().getSimpleName());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Не удалось загрузить картинку для Telegram");
         }
-        log.info("[SCHEDULE SHARE] prepare user={} image={} bytes={} photoUrl={} proxy={}", user, id, bytes.length, url, proxy.type());
+        log.info("[SCHEDULE SHARE] prepare user={} image={} bytes={} photoUrl={}", user, id, bytes.length, url);
         var result = Map.of("type", "photo", "id", id, "photo_url", url, "thumbnail_url", url,
                 "caption", caption,
                 "reply_markup", Map.of("inline_keyboard", List.of(List.of(Map.of("text", "Открыть расписание", "url", botLink + "?startapp")))));
         try {
             var body = Map.of("user_id", user, "result", result, "allow_user_chats", true,
                     "allow_group_chats", true, "allow_channel_chats", true);
-            var request = HttpRequest.newBuilder(URI.create(apiBase + token + "/savePreparedInlineMessage"))
-                    .timeout(Duration.ofSeconds(8)).header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build();
-            int status;
-            String responseBody;
-            if (proxy == java.net.Proxy.NO_PROXY) {
-                var response = http.send(request, HttpResponse.BodyHandlers.ofString());
-                status = response.statusCode(); responseBody = response.body();
-            } else {
-                // JDK HttpClient does not support SOCKS; use a per-request proxy without global JVM settings.
-                var connection = (java.net.HttpURLConnection) request.uri().toURL().openConnection(proxy);
-                try {
-                    connection.setConnectTimeout(4000); connection.setReadTimeout(8000);
-                    connection.setRequestMethod("POST"); connection.setDoOutput(true);
-                    connection.setRequestProperty("Content-Type", "application/json");
-                    try (var out = connection.getOutputStream()) { out.write(json.writeValueAsBytes(body)); }
-                    status = connection.getResponseCode();
-                    try (var in = status >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
-                        responseBody = in == null ? "{}" : new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-                    }
-                } finally { connection.disconnect(); }
-            }
+            var response = telegram.postJson("savePreparedInlineMessage", json.writeValueAsString(body));
+            int status = response.status();
+            String responseBody = response.body();
             var data = json.readTree(responseBody);
             String preparedId = data.path("result").path("id").asText();
             if (status != 200 || !data.path("ok").asBoolean() || preparedId.isBlank()) {
-                String description = data.path("description").asText("No description").replace(token, "[redacted]").replaceAll("[\\r\\n]", " ");
+                String description = data.path("description").asText("No description").replaceAll("[\\r\\n]", " ");
                 log.warn("[SCHEDULE SHARE] Telegram rejected prepared message: HTTP {}, code {}, description {}",
                         status, data.path("error_code").asInt(), description.substring(0, Math.min(300, description.length())));
                 throw new IllegalStateException();

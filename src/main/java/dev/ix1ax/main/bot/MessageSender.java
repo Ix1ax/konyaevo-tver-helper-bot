@@ -20,7 +20,7 @@ public class MessageSender {
     private static final Logger log = LoggerFactory.getLogger(MessageSender.class);
 
     private final ScheduleService scheduleService;
-    private AbsSender bot;
+    private TelegramRoutes telegram;
     private record Screen(String token, java.util.List<String> pages, InlineKeyboardMarkup keyboard, long created) {}
     private final java.util.Map<Long, Screen> screens = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -53,10 +53,20 @@ public class MessageSender {
     }
 
     /**
-     * Must be called after bot construction to provide the sender reference.
+     * Must be called after bot construction to provide the Telegram routes.
      */
-    public void init(AbsSender bot) {
-        this.bot = bot;
+    public void init(TelegramRoutes telegram) {
+        this.telegram = telegram;
+    }
+
+    /** Один отправитель без запасного маршрута (тесты). */
+    public void init(AbsSender sender) {
+        init(TelegramRoutes.of(sender));
+    }
+
+    /** Через какой маршрут бот сейчас ходит в Telegram — для отчёта администратору. */
+    public String telegramRoute() {
+        return telegram == null ? "не подключён" : telegram.activeRoute();
     }
 
     /**
@@ -72,16 +82,16 @@ public class MessageSender {
         msg.setReplyMarkup(screen == null ? keyboard : pageKeyboard(screen, 0));
 
         try {
-            Message sent = (Message) bot.execute(msg);
+            Message sent = (Message) telegram.call(sender -> sender.execute(msg));
             UserSettings user = scheduleService.getOrCreateUser(chatId);
             Integer oldId = user.getMessageId();
             user.setMessageId(sent.getMessageId());
             if (screen == null) screens.remove(chatId); else screens.put(chatId, screen);
             if (oldId != null && !oldId.equals(sent.getMessageId())) {
                 try {
-                    bot.execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
+                    telegram.call(sender -> sender.execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
                             .chatId(Long.toString(chatId)).messageId(oldId)
-                            .replyMarkup(new InlineKeyboardMarkup(java.util.List.of())).build());
+                            .replyMarkup(new InlineKeyboardMarkup(java.util.List.of())).build()));
                 } catch (Exception ignored) { /* Старое сообщение могло быть удалено пользователем. */ }
             }
             scheduleService.saveUser(user);
@@ -116,7 +126,7 @@ public class MessageSender {
         edit.setReplyMarkup(keyboard);
 
         try {
-            bot.execute(edit);
+            telegram.call(sender -> sender.execute(edit));
             log.debug("[SCREEN UPDATE] Edited msgId: {} for chatId: {}", messageId, chatId);
         } catch (Exception e) {
             if (TelegramErrorClassifier.isUserBlockedError(e)) {
@@ -170,7 +180,7 @@ public class MessageSender {
         }
 
         try {
-            bot.execute(msg);
+            telegram.call(sender -> sender.execute(msg));
             return DirectSendResult.SUCCESS;
         } catch (Exception e) {
             if (TelegramErrorClassifier.isUserBlockedError(e)) {
@@ -186,7 +196,7 @@ public class MessageSender {
             try {
                 msg.setParseMode(null);
                 msg.setText(text.replaceAll("<[^>]*>", ""));
-                bot.execute(msg);
+                telegram.call(sender -> sender.execute(msg));
                 return DirectSendResult.SUCCESS;
             } catch (Exception ex2) {
                 if (TelegramErrorClassifier.isUserBlockedError(ex2)) {
@@ -206,14 +216,14 @@ public class MessageSender {
             var file = new org.telegram.telegrambots.meta.api.objects.InputFile(media.fileId());
             String chat = Long.toString(chatId);
             switch (media.type()) {
-                case PHOTO -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendPhoto.builder()
-                        .chatId(chat).photo(file).caption(media.caption()).captionEntities(media.entities()).build());
-                case VIDEO -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendVideo.builder()
-                        .chatId(chat).video(file).caption(media.caption()).captionEntities(media.entities()).supportsStreaming(true).build());
-                case ANIMATION -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendAnimation.builder()
-                        .chatId(chat).animation(file).caption(media.caption()).captionEntities(media.entities()).build());
-                case DOCUMENT -> bot.execute(org.telegram.telegrambots.meta.api.methods.send.SendDocument.builder()
-                        .chatId(chat).document(file).caption(media.caption()).captionEntities(media.entities()).build());
+                case PHOTO -> telegram.call(sender -> sender.execute(org.telegram.telegrambots.meta.api.methods.send.SendPhoto.builder()
+                        .chatId(chat).photo(file).caption(media.caption()).captionEntities(media.entities()).build()));
+                case VIDEO -> telegram.call(sender -> sender.execute(org.telegram.telegrambots.meta.api.methods.send.SendVideo.builder()
+                        .chatId(chat).video(file).caption(media.caption()).captionEntities(media.entities()).supportsStreaming(true).build()));
+                case ANIMATION -> telegram.call(sender -> sender.execute(org.telegram.telegrambots.meta.api.methods.send.SendAnimation.builder()
+                        .chatId(chat).animation(file).caption(media.caption()).captionEntities(media.entities()).build()));
+                case DOCUMENT -> telegram.call(sender -> sender.execute(org.telegram.telegrambots.meta.api.methods.send.SendDocument.builder()
+                        .chatId(chat).document(file).caption(media.caption()).captionEntities(media.entities()).build()));
             }
             return DirectSendResult.SUCCESS;
         } catch (Exception e) {
@@ -233,7 +243,7 @@ public class MessageSender {
             sendMsg.setText(text);
             sendMsg.setParseMode("HTML");
             sendMsg.setReplyMarkup(keyboard);
-            Message sent = (Message) bot.execute(sendMsg);
+            Message sent = (Message) telegram.call(sender -> sender.execute(sendMsg));
 
             UserSettings user = scheduleService.getOrCreateUser(chatId);
             user.setMessageId(sent.getMessageId());
@@ -258,7 +268,7 @@ public class MessageSender {
             plainMsg.setChatId(String.valueOf(chatId));
             plainMsg.setText(text.replaceAll("<[^>]*>", ""));
             plainMsg.setReplyMarkup(keyboard);
-            Message sent = (Message) bot.execute(plainMsg);
+            Message sent = (Message) telegram.call(sender -> sender.execute(plainMsg));
 
             UserSettings user = scheduleService.getOrCreateUser(chatId);
             user.setMessageId(sent.getMessageId());

@@ -5,9 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.apache.http.client.config.RequestConfig;
-import org.telegram.telegrambots.bots.DefaultBotOptions;
-import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import dev.ix1ax.main.model.UserSettings;
@@ -15,10 +12,11 @@ import dev.ix1ax.main.service.ScheduleService;
 
 /**
  * Main Telegram bot class — thin router.
- * Delegates callback handling to {@link CallbackRouter} and message sending to {@link MessageSender}.
+ * Updates arrive from {@link TelegramPoller}; callback handling goes to {@link CallbackRouter},
+ * message sending to {@link MessageSender}, both through {@link TelegramRoutes}.
  */
 @Component
-public class KonyaevoBot extends TelegramLongPollingBot {
+public class KonyaevoBot {
 
     private final java.util.Map<Long, Long> pendingBroadcastMedia = new java.util.concurrent.ConcurrentHashMap<>();
     private final ChatUpdateDispatcher updates;
@@ -28,96 +26,37 @@ public class KonyaevoBot extends TelegramLongPollingBot {
     @Value("${bot.username}")
     private String botUsername;
 
+    private final TelegramRoutes telegram;
     private final ScheduleService scheduleService;
     private final CallbackRouter callbackRouter;
     private final MessageSender messageSender;
     private final dev.ix1ax.main.service.AdminService adminService;
 
-    public KonyaevoBot(@Value("${bot.token}") String botToken,
-                       @Value("${bot.base-url:https://api.telegram.org/bot}") String baseUrl,
-                       @Value("${bot.max-threads:16}") int maxThreads,
-                       @Value("${bot.proxy.type:NO_PROXY}") String proxyType,
-                       @Value("${bot.proxy.host:127.0.0.1}") String proxyHost,
-                       @Value("${bot.proxy.port:10808}") int proxyPort,
+    public KonyaevoBot(@Value("${bot.max-threads:16}") int maxThreads,
                        @Value("${bot.mini-app-url:}") String miniAppUrl,
+                       TelegramRoutes telegram,
                        ScheduleService scheduleService,
                        CallbackRouter callbackRouter,
                        MessageSender messageSender,
                        dev.ix1ax.main.service.AdminService adminService) {
-        super(createBotOptions(baseUrl, maxThreads, proxyType, proxyHost, proxyPort), botToken);
-        this.updates = new ChatUpdateDispatcher(maxThreads);
+        this.updates = new ChatUpdateDispatcher(Math.max(4, maxThreads));
+        this.telegram = telegram;
         this.scheduleService = scheduleService;
         this.callbackRouter = callbackRouter;
         this.messageSender = messageSender;
         this.adminService = adminService;
         KeyboardFactory.setMiniAppUrl(miniAppUrl);
-
-        // AbsSender has captured the fast senderConfig (5s socket timeout) from createBotOptions().
-        // Now set pollingConfig (25s socket timeout) for DefaultBotSession long polling (15s getUpdates):
-        RequestConfig pollingConfig = RequestConfig.custom()
-                .setConnectTimeout(6000)
-                .setSocketTimeout(25000)
-                .setConnectionRequestTimeout(6000)
-                .build();
-        getOptions().setRequestConfig(pollingConfig);
-    }
-
-    private static DefaultBotOptions createBotOptions(String baseUrl, int maxThreads,
-                                                     String proxyType, String proxyHost, int proxyPort) {
-        DefaultBotOptions options = new DefaultBotOptions();
-        options.setMaxThreads(Math.max(4, maxThreads));
-        // Long polling timeout: 15 seconds (Telegram returns clean HTTP 200 [] on idle)
-        options.setGetUpdatesTimeout(15);
-
-        // Fast timeout for message sending / editing: 5s socket timeout
-        // Normal Telegram API responses take ~100ms. If it hangs, fail fast in 5s instead of 60s.
-        RequestConfig senderConfig = RequestConfig.custom()
-                .setConnectTimeout(4000)
-                .setSocketTimeout(5000)
-                .setConnectionRequestTimeout(4000)
-                .build();
-        options.setRequestConfig(senderConfig);
-
-        // Proxy configuration (e.g. SOCKS5 via local Xray / Happ daemon)
-        if (proxyType != null && !proxyType.equalsIgnoreCase("NO_PROXY") && !proxyType.isBlank()) {
-            if ("SOCKS5".equalsIgnoreCase(proxyType.trim())) {
-                options.setProxyType(DefaultBotOptions.ProxyType.SOCKS5);
-            } else if ("HTTP".equalsIgnoreCase(proxyType.trim())) {
-                options.setProxyType(DefaultBotOptions.ProxyType.HTTP);
-            } else if ("SOCKS4".equalsIgnoreCase(proxyType.trim())) {
-                options.setProxyType(DefaultBotOptions.ProxyType.SOCKS4);
-            }
-            options.setProxyHost(proxyHost != null ? proxyHost.trim() : "127.0.0.1");
-            options.setProxyPort(proxyPort > 0 ? proxyPort : 10808);
-            log.info("[BOT CONFIG] Using {} proxy: {}:{}", options.getProxyType(), options.getProxyHost(), options.getProxyPort());
-        }
-
-        if (baseUrl != null && !baseUrl.isBlank()) {
-            String trimmed = baseUrl.trim();
-            if (trimmed.endsWith("/")) {
-                trimmed = trimmed.substring(0, trimmed.length() - 1);
-            }
-            if (!trimmed.endsWith("/bot")) {
-                trimmed = trimmed + "/bot";
-            }
-            options.setBaseUrl(trimmed);
-            log.info("[BOT CONFIG] Using Telegram base URL: {}", trimmed);
-        }
-        log.info("[BOT CONFIG] Telegram executor thread pool size: {}", options.getMaxThreads());
-        return options;
     }
 
     @PostConstruct
     public void init() {
-        messageSender.init(this);
+        messageSender.init(telegram);
     }
 
-    @Override
     public String getBotUsername() {
         return botUsername;
     }
 
-    @Override
     public void onUpdateReceived(Update update) {
         Long chat = update.hasMyChatMember() ? update.getMyChatMember().getChat().getId() : update.hasMessage() ? update.getMessage().getChatId()
                 : update.hasCallbackQuery() && update.getCallbackQuery().getMessage() != null ? update.getCallbackQuery().getMessage().getChatId() : null;
@@ -293,9 +232,9 @@ public class KonyaevoBot extends TelegramLongPollingBot {
 
         // Answer callback to remove loading indicator
         try {
-            execute(AnswerCallbackQuery.builder()
+            telegram.call(sender -> sender.execute(AnswerCallbackQuery.builder()
                     .callbackQueryId(callback.getId())
-                    .build());
+                    .build()));
         } catch (Exception e) {
             if (!TelegramErrorClassifier.isUserBlockedError(e)
                     && !TelegramErrorClassifier.isNetworkError(e)) {

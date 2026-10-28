@@ -19,20 +19,23 @@ public class ImageKitStorage {
     private final ObjectMapper json;
     private final SharedImageRepository cleanup;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-    private final Proxy proxy;
+    private final List<Proxy> proxies;
     public record Uploaded(String fileId, String url, long expiresAt) {}
     record Response(int status, String body) {}
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ImageKitStorage(ObjectMapper json, SharedImageRepository cleanup,
             @Value("${IMAGEKIT_PRIVATE_KEY:}") String key,
             @Value("${IMAGEKIT_URL_ENDPOINT:}") String endpoint,
-            @Value("${bot.proxy.type:NO_PROXY}") String proxyType,
-            @Value("${bot.proxy.host:127.0.0.1}") String host,
-            @Value("${bot.proxy.port:10808}") int port) {
-        this.json = json; this.cleanup = cleanup; this.key = key.trim();
-        this.endpoint = endpoint.trim().replaceAll("/$", "");
-        proxy = "HTTP".equalsIgnoreCase(proxyType) ? new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port))
-                : proxyType.toUpperCase(Locale.ROOT).startsWith("SOCKS") ? new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(host, port)) : Proxy.NO_PROXY;
+            dev.ix1ax.main.bot.TelegramRoutes routes) {
+        this(json, cleanup, key, endpoint, routes.proxies());
+    }
+
+    /** Прокси пробуются в порядке маршрутов Telegram: ImageKit доступен тем же путём, что и бот. */
+    public ImageKitStorage(ObjectMapper json, SharedImageRepository cleanup, String key, String endpoint, List<Proxy> proxies) {
+        this.json = json; this.cleanup = cleanup; this.key = dev.ix1ax.main.util.EnvValue.clean(key);
+        this.endpoint = dev.ix1ax.main.util.EnvValue.clean(endpoint).replaceAll("/$", "");
+        this.proxies = proxies.isEmpty() ? List.of(Proxy.NO_PROXY) : List.copyOf(proxies);
         if (enabled() && !this.endpoint.matches("https://ik\\.imagekit\\.io/[A-Za-z0-9_-]+"))
             throw new IllegalArgumentException("IMAGEKIT_URL_ENDPOINT must be https://ik.imagekit.io/your_id");
     }
@@ -100,6 +103,18 @@ public class ImageKitStorage {
         // CDN copies may remain cached: deletion removes the origin asset, not an exact URL expiry guarantee.
     }
     private Response request(String method, String url, String contentType, byte[] body) throws Exception {
+        // Загрузка и удаление идемпотентны (имя файла фиксировано), поэтому при обрыве повторяем через следующий прокси.
+        java.io.IOException failure = null;
+        for (Proxy proxy : proxies) {
+            try { return request(proxy, method, url, contentType, body); }
+            catch (java.io.IOException e) {
+                failure = e;
+                if (proxies.size() > 1) log.warn("[SCHEDULE SHARE] ImageKit unreachable via {}: {}", proxy, e.getClass().getSimpleName());
+            }
+        }
+        throw failure;
+    }
+    private Response request(Proxy proxy, String method, String url, String contentType, byte[] body) throws Exception {
         String auth = "Basic " + Base64.getEncoder().encodeToString((key + ":").getBytes(StandardCharsets.UTF_8));
         if (proxy == Proxy.NO_PROXY) {
             var request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(15))
