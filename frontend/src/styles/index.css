@@ -265,6 +265,8 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .mascot { overflow: visible; }
 .empty-state-mascot { display: block; margin: -12px auto 4px; }
 .loading-mascot { margin-bottom: -8px; }
+/* Цвет фона совпадает с первой отрисовкой из index.html, поэтому переход к приложению без вспышки. */
+.loading-state.loading-fullscreen { position: fixed; inset: 0; z-index: 55; min-height: 100dvh; padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
 
 /* Огонёк Парыча в шапке. */
 .flame-chip { height: 36px; padding: 0 12px 0 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 800; color: var(--color-subtext); background: rgba(255, 255, 255, .05); border: 1px solid var(--color-border); transition: transform .15s; }

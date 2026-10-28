@@ -34,7 +34,7 @@ export function App() {
     <main className={`max-w-lg mx-auto min-h-screen ${isAdmin ? 'pb-28' : 'pb-14'}`}>
       {refreshing && <LoadingIndicator compact label="Обновляем расписание…" />}
       {loadError && <p role="alert" className="notice error-notice m-5">{loadError}</p>}
-      {loading ? <LoadingIndicator /> : needsProfile && (loadError || !selected)
+      {loading ? <LoadingIndicator fullscreen /> : needsProfile && (loadError || !selected)
         ? <div className="page"><EmptyState title={loading ? 'Загружаем расписание' : loadError ? 'Данные недоступны' : 'Ваше расписание'}>
             {loading ? 'Это займёт несколько секунд.' : loadError ? 'Повторите загрузку в профиле.' : 'Выберите группу или преподавателя.'}
           </EmptyState><button className="button-quiet w-full" onClick={() => setActiveTab('profile')}>Открыть профиль</button></div>

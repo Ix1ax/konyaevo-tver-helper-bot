@@ -16,9 +16,10 @@ export function EmptyState({ title = 'Пар нет', mascot = false, children }
   </div>;
 }
 
-export function LoadingIndicator({ label = 'Загружаем расписание', compact = false }: { label?: string; compact?: boolean }) {
+/** fullscreen — стартовая загрузка поверх всего экрана, включая навигацию. */
+export function LoadingIndicator({ label = 'Загружаем расписание', compact = false, fullscreen = false }: { label?: string; compact?: boolean; fullscreen?: boolean }) {
   const look = useMascotLook();
-  return <div className={`loading-state ${compact ? 'loading-compact' : ''}`} role="status" aria-live="polite">
+  return <div className={`loading-state ${compact ? 'loading-compact' : ''} ${fullscreen ? 'loading-fullscreen' : ''}`} role="status" aria-live="polite">
     {!compact && <Mascot size={120} look={look} mood="wink" pose="hold-list" className="loading-mascot" />}
     <span className="loading-brand font-unbounded" aria-hidden="true">Коняево</span>
     <span className="loading-dots" aria-hidden="true"><i /><i /><i /></span>
