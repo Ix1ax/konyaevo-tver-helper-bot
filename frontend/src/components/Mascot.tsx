@@ -52,14 +52,32 @@ const FLAME_PATH = 'M14 0 C18 12 30 16 28 32 C27 42 20 48 13 48 C5 48 -2 42 -1 3
 const FLAME_CORE = 'M13 22 C16 30 22 32 20 40 C19 45 16 47 13 47 C9 47 6 44 6 40 C6 35 10 33 13 22Z';
 const flameGradient = (id: string) => `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb347"/><stop offset=".6" stop-color="#ff6a2b"/><stop offset="1" stop-color="#ff3d5a"/></linearGradient>`;
 
-// Облики рисуются поверх карточки и открываются уровнями.
-const LOOKS: Record<MascotLookId, string> = {
+// Облики рисуются поверх карточки и открываются уровнями (звёздный и корона — поддержкой).
+const LOOKS: Record<Exclude<MascotLookId, 'star' | 'crown'>, string> = {
   classic: '',
   autumn: `<path d="M48 132 Q96 150 146 128 L148 144 Q96 166 46 148Z" fill="#ff9a2e"/><path d="M118 142 L124 172 L110 172 L106 146Z" fill="#f08419"/><path d="M60 140 L60 152 M80 146 L80 157 M100 147 L100 158" stroke="#ffc07a" stroke-width="3"/>`,
   winter: `<g transform="rotate(-6 96 104)"><path d="M54 66 Q58 26 98 24 Q138 26 140 64 Z" fill="${BLUE}"/><rect x="48" y="58" width="98" height="16" rx="8" fill="#2a3fd6"/><path d="M64 60 L64 30 M78 58 L78 26 M94 58 L94 24 M110 58 L110 26 M126 60 L126 32" stroke="#2a3fd6" stroke-width="3" opacity=".5"/><circle cx="98" cy="20" r="11" fill="${BLUE_LIGHT}"/></g>`,
   spring: `<g transform="translate(58 62)">${[0, 72, 144, 216, 288].map(angle => `<ellipse cx="0" cy="-9" rx="6" ry="9" fill="#ff9fc0" transform="rotate(${angle})"/>`).join('')}<circle r="5.5" fill="#ffd36b"/></g>`,
   summer: `<g transform="rotate(-6 96 104)"><rect x="62" y="82" width="28" height="18" rx="8" fill="${INK}"/><rect x="98" y="82" width="28" height="18" rx="8" fill="${INK}"/><path d="M90 88 L98 88" stroke="${INK}" stroke-width="4"/><path d="M66 86 L74 86 M102 86 L110 86" stroke="#fff" stroke-opacity=".6" stroke-width="3" stroke-linecap="round"/></g>`,
   graduate: `<g transform="rotate(-10 96 60)"><path d="M58 52 L96 38 L134 52 L96 66 Z" fill="${INK}" stroke="#3a4280" stroke-width="1.5"/><path d="M72 58 L72 72 Q96 82 120 72 L120 58 L96 66Z" fill="#22285a"/><path d="M134 52 L136 74" stroke="#ffc94a" stroke-width="3"/><circle cx="136" cy="76" r="4" fill="#ffc94a"/></g>`,
+};
+
+/** Пятиконечная звезда с центром (x, y) и внешним радиусом r. */
+const starPath = (x: number, y: number, r: number) => 'M' + Array.from({ length: 10 }, (_, i) => {
+  const a = -Math.PI / 2 + i * Math.PI / 5, d = i % 2 ? r * .45 : r;
+  return `${(x + Math.cos(a) * d).toFixed(1)} ${(y + Math.sin(a) * d).toFixed(1)}`;
+}).join(' L') + 'Z';
+const GOLD = '#ffc94a', GOLD_DARK = '#e09a00';
+// Облики поддержки: открываются пожертвованием звёздами.
+const SUPPORT_LOOKS = {
+  star: `<g transform="rotate(-6 96 104)"><path d="M88 91 L100 91" stroke="${GOLD_DARK}" stroke-width="3.5" stroke-linecap="round"/>${[EYE_L, EYE_R].map(x =>
+    `<path d="${starPath(x, EYE_Y, 16)}" fill="${GOLD}" stroke="${GOLD_DARK}" stroke-width="2.5" stroke-linejoin="round"/><path d="${starPath(x, EYE_Y + .5, 9.5)}" fill="${INK}"/><circle cx="${x - 2.5}" cy="${EYE_Y - 3}" r="2" fill="#fff"/>`).join('')}</g>
+    ${[[34, 46, 9], [162, 38, 7], [178, 70, 5]].map(([x, y, r]) => `<path d="${starPath(x, y, r)}" fill="${GOLD}" stroke="${GOLD_DARK}" stroke-width="1.5" stroke-linejoin="round"/>`).join('')}`,
+  crown: `<g transform="rotate(-8 96 50)"><path d="M66 60 L69 30 L83 45 L96 22 L109 45 L123 30 L126 60 Z" fill="${GOLD}" stroke="${GOLD_DARK}" stroke-width="2.5" stroke-linejoin="round"/>
+    <rect x="65" y="52" width="62" height="11" rx="4" fill="#ffb020" stroke="${GOLD_DARK}" stroke-width="2"/>
+    ${[[69, 30], [96, 22], [123, 30]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4.5" fill="${GOLD}" stroke="${GOLD_DARK}" stroke-width="2"/>`).join('')}
+    <circle cx="96" cy="57.5" r="4.5" fill="#ff4d6d"/><circle cx="79" cy="57.5" r="3.5" fill="${BLUE}"/><circle cx="113" cy="57.5" r="3.5" fill="${BLUE}"/>
+    <path d="M74 40 L76 50" stroke="#fff" stroke-opacity=".6" stroke-width="2.5" stroke-linecap="round"/></g>`,
 };
 
 const EXTRAS: Record<Exclude<MascotExtra, 'flame'>, string> = {
@@ -86,7 +104,7 @@ ${flameGradient(id + 'f')}<filter id="${id}s" x="-20%" y="-20%" width="140%" hei
 <rect x="26" y="44" width="104" height="90" rx="18" fill="${BLUE}" opacity=".22" transform="rotate(-16 78 89)"/>
 <rect x="34" y="50" width="106" height="92" rx="18" fill="${BLUE_LIGHT}" opacity=".38" transform="rotate(-11 87 96)"/>
 <g filter="url(#${id}s)"><rect x="44" y="56" width="104" height="94" rx="19" fill="url(#${id}b)" stroke="#fff" stroke-width="2" transform="rotate(-6 96 103)"/></g>
-<g transform="rotate(-6 96 104)">${FACES[mood]}</g>${LOOKS[look] ?? ''}${held}${front}${above}`;
+<g transform="rotate(-6 96 104)">${FACES[mood]}</g>${look === 'star' || look === 'crown' ? SUPPORT_LOOKS[look] : LOOKS[look] ?? ''}${held}${front}${above}`;
 }
 
 /** Парыч: стопка карточек расписания с лицом. Разметка статична, пользовательских данных в ней нет. */

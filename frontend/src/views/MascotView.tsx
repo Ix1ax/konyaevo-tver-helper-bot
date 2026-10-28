@@ -1,10 +1,11 @@
-import { ChevronLeft, Check, Lock, Snowflake } from 'lucide-react';
+import { ChevronLeft, Check, Lock, Snowflake, Star } from 'lucide-react';
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useMascot } from '../context/MascotContext';
 import { useTelegram } from '../hooks/useTelegram';
 import { FlameIcon, Mascot } from '../components/Mascot';
 import { EmptyState } from '../components/Ui';
+import { SupportPanel } from '../components/SupportParych';
 import type { MascotLookId } from '../types';
 
 const moscowWeekday = () => { const now = new Date(Date.now() + 3 * 3600000); return (now.getUTCDay() + 6) % 7; };
@@ -67,12 +68,20 @@ export function MascotView() {
     </div>)}</div>
 
     <p className="section-label">Облики</p>
-    <div className="mascot-looks">{mascot.looks.map(look => <button key={look.id} className="mascot-look surface" disabled={!look.unlocked}
-      aria-pressed={mascot.look === look.id} onClick={() => look.unlocked && mascot.look !== look.id && save({ look: look.id })}>
+    <div className="mascot-looks">{mascot.looks.map(look => <button key={look.id} className="mascot-look surface"
+      data-support={look.stars > 0 || undefined} aria-disabled={!look.unlocked || undefined}
+      aria-pressed={mascot.look === look.id} onClick={() => {
+        // Закрытый облик поддержки ведёт к блоку «Поддержать», остальные закрытые не нажимаются.
+        if (!look.unlocked) { if (look.stars > 0) document.getElementById('support')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+        if (mascot.look !== look.id) save({ look: look.id });
+      }}>
       <Mascot size={70} look={look.id} pose="wave" />
-      {!look.unlocked && <span className="mascot-lock"><Lock size={13} /></span>}
-      <span>{look.unlocked ? look.name : `Ур. ${look.level}`}</span>
+      {!look.unlocked && <span className="mascot-lock">{look.stars > 0 ? <Star size={13} fill="currentColor" /> : <Lock size={13} />}</span>}
+      <span>{look.unlocked ? look.name : look.stars > 1 ? `${look.stars} ⭐` : look.stars ? 'Поддержка' : `Ур. ${look.level}`}</span>
     </button>)}</div>
+
+    <p className="section-label" id="support">Поддержать Парыча</p>
+    <section className="surface mascot-card support-section"><SupportPanel /></section>
 
     <p className="section-label">Напоминание</p>
     <div className="settings-group">

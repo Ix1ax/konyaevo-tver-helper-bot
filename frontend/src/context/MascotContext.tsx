@@ -12,6 +12,8 @@ interface MascotContextType {
   sendEvent: (type: MascotEvent) => void;
   updateSettings: (settings: { look?: MascotLookId; reminder?: boolean }) => Promise<void>;
   acknowledgeRewards: () => void;
+  /** Перечитать состояние с сервера: после оплаты звёздами облик открывает бот. */
+  refresh: () => Promise<void>;
 }
 
 const MascotContext = createContext<MascotContextType | undefined>(undefined);
@@ -48,7 +50,12 @@ export const MascotProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     signedRequest<MascotState>('/mascot/rewards/ack', {}).then(setMascot).catch(() => { /* Награда покажется снова при следующем входе. */ });
   }, []);
 
-  return <MascotContext.Provider value={{ mascot, look: mascot?.look ?? 'classic', sendEvent, updateSettings, acknowledgeRewards }}>
+  const refresh = useCallback(async () => {
+    if (!signed) return;
+    setMascot(await signedRequest<MascotState>('/mascot'));
+  }, [signed]);
+
+  return <MascotContext.Provider value={{ mascot, look: mascot?.look ?? 'classic', sendEvent, updateSettings, acknowledgeRewards, refresh }}>
     {children}
   </MascotContext.Provider>;
 };

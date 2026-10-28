@@ -3,14 +3,15 @@ import { RefreshCw, CalendarDays } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTelegram } from '../hooks/useTelegram';
 import { FlameIcon } from './Mascot';
+import { SupportButton } from './SupportParych';
 
-export function Header({ title, showGreeting = true, action }: { title?: string; showGreeting?: boolean; action?: React.ReactNode }) {
+export function Header({ title, showGreeting = true, action, support = false }: { title?: string; showGreeting?: boolean; action?: React.ReactNode; support?: boolean }) {
   const { role, selectedGroup, selectedTeacher, info, refreshing, refreshAll, setActiveTab } = useApp();
   const { user, haptic } = useTelegram();
   const name = (role === 'student' ? selectedGroup : selectedTeacher) || 'Выбрать';
   const initial = user?.first_name ? user.first_name.charAt(0).toUpperCase() : (name.charAt(0) || 'К');
 
-  return <HeaderContent title={title} showGreeting={showGreeting} action={action} name={name} initial={initial}
+  return <HeaderContent title={title} showGreeting={showGreeting} action={action} name={name} initial={initial} topAction={support ? <SupportButton /> : undefined}
     photoUrl={user?.photo_url} red={info.isRedWeek} refreshing={refreshing}
     onProfile={() => { haptic.impact('light'); setActiveTab('profile'); }}
     onWeek={() => { haptic.impact('light'); setActiveTab('week'); }}
@@ -18,10 +19,10 @@ export function Header({ title, showGreeting = true, action }: { title?: string;
     />;
 }
 
-export function HeaderContent({title, showGreeting = true, action, name, initial = 'К', photoUrl, red = false, refreshing = false, hideAvatar = false, subtitle, identityLabel,
+export function HeaderContent({title, showGreeting = true, action, topAction, name, initial = 'К', photoUrl, red = false, refreshing = false, hideAvatar = false, subtitle, identityLabel,
   streak, streakCounted = false, onStreak = () => {}, onProfile = () => {}, onWeek = () => {}, onRefresh = () => {}}: {
   streak?: number; streakCounted?: boolean; onStreak?: () => void;
-  title?: string; showGreeting?: boolean; action?: React.ReactNode; name: string; initial?: string; photoUrl?: string;
+  title?: string; showGreeting?: boolean; action?: React.ReactNode; topAction?: React.ReactNode; name: string; initial?: string; photoUrl?: string;
   identityLabel?: string; hideAvatar?: boolean; subtitle?: string; red?: boolean; refreshing?: boolean; onProfile?: () => void; onWeek?: () => void; onRefresh?: () => void;
 }) {
   const [avatarError, setAvatarError] = React.useState(false);
@@ -52,6 +53,7 @@ export function HeaderContent({title, showGreeting = true, action, name, initial
         </div>}
 
         <div className="flex items-center gap-2">
+        {topAction}
         {streak !== undefined && <button className="flame-chip font-unbounded" data-counted={streakCounted || undefined}
           onClick={onStreak} aria-label={`Огонёк: ${streak} дней подряд. Открыть Парыча`}>
           <FlameIcon size={18} />{streak}
