@@ -6,6 +6,7 @@ import { DaySelector } from '../components/DaySelector';
 import { LoadingIndicator, EmptyState, IconBadge } from '../components/Ui';
 import { useApp } from '../context/AppContext';
 import { api, profileRequest } from '../api/client';
+import { SEARCH_TABS, TabSwitch } from '../components/TabSwitch';
 import type { ScheduleMap } from '../types';
 
 const DAYS = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'];
@@ -52,7 +53,8 @@ export function TeachersView() {
         : loading ? <LoadingIndicator />
         : lessons.length ? lessons.map((lesson, index) => <LessonCard key={index} lesson={lesson} highlightCurrent={day === info.todayName} />) : <EmptyState />}</div>
     </> : <>
-      <Header title="Преподаватели" showGreeting={false} />
+      <Header title="Поиск" showGreeting={false} />
+      <TabSwitch items={SEARCH_TABS} />
       <label htmlFor="teacher-search" className="sr-only">Поиск преподавателя</label>
       <div className="relative mb-4"><Search className="absolute left-3 top-3 text-theme-subtext" />
         <input id="teacher-search" className="field !pl-10" placeholder="Фамилия или инициалы" value={query} onChange={(event) => setQuery(event.target.value)} /></div>

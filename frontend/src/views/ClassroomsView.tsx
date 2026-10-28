@@ -6,6 +6,7 @@ import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { selectedWeekDate } from '../utils/calendar';
 import { api } from '../api/client';
+import { SEARCH_TABS, TabSwitch } from '../components/TabSwitch';
 import type { ClassroomsResponse } from '../types';
 
 const SLOTS = [1, 2, 3, 4, 5, 6];
@@ -57,7 +58,8 @@ export function ClassroomsView() {
 
   return (
     <div className="page animate-fade-in select-none">
-      <Header title="Свободные аудитории" showGreeting={false} />
+      <Header title="Поиск" showGreeting={false} />
+      <TabSwitch items={SEARCH_TABS} />
 
       {/* Days chips row */}
       <div className="flex gap-1.5 mb-3 overflow-x-auto no-scrollbar">

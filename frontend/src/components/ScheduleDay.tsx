@@ -3,6 +3,8 @@ import { SummaryCard } from './SummaryCard';
 import { LessonCard } from './LessonCard';
 import { EmptyState } from './Ui';
 import { MascotTip } from './MascotTip';
+import { ShareButton } from './ShareButton';
+import { DAY_TABS, TabSwitch } from './TabSwitch';
 import { ArrowRightLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -13,7 +15,8 @@ export function ScheduleDay({ tomorrow = false }: { tomorrow?: boolean }) {
   const lessons = (schedule[day]?.lessons || []).filter((lesson) => !lesson.weekType || lesson.weekType === (red ? 'red' : 'blue'));
   const changed = lessons.some((lesson) => lesson.changed);
   return <div className="page animate-fade-in">
-    <Header title={tomorrow ? 'Завтра' : 'Сегодня'} showGreeting={!tomorrow} />
+    <Header title={tomorrow ? 'Завтра' : 'Сегодня'} showGreeting={!tomorrow} action={<ShareButton />} />
+    <TabSwitch items={DAY_TABS} />
     {day ? <>
       {tomorrow && <p className="text-sm text-theme-subtext mb-4">{day} · {red ? 'Красная' : 'Синяя'} неделя</p>}
       {changed && (
