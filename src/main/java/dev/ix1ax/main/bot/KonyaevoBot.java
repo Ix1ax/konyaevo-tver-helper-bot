@@ -285,9 +285,16 @@ public class KonyaevoBot {
         String data = callback.getData();
         if ("more".equals(data) && callback.getMessage() != null) {
             long chat = callback.getMessage().getChatId();
-            boolean teacher = "teacher".equals(scheduleService.getOrCreateUser(chat).getRole());
-            messageSender.editMessage(chat, callback.getMessage().getMessageId(), "⚙️ <b>Ещё</b>\n\nУведомления, смена расписания и справка.",
-                    KeyboardFactory.buildMoreKeyboard(teacher));
+            int message = callback.getMessage().getMessageId();
+            UserSettings user = scheduleService.getOrCreateUser(chat);
+            // Как в CallbackRouter: нажатое сообщение становится текущим экраном, иначе кнопки «Ещё» сочтутся устаревшими.
+            if (user.getMessageId() != null && user.getMessageId() != message) {
+                messageSender.removeKeyboard(chat, user.getMessageId());
+                user.setMessageId(message);
+                scheduleService.saveUser(user);
+            }
+            messageSender.editMessage(chat, message, "⚙️ <b>Ещё</b>\n\nУведомления, смена расписания и справка.",
+                    KeyboardFactory.buildMoreKeyboard("teacher".equals(user.getRole())));
             return;
         }
         if (data != null && data.startsWith("donate:") && callback.getMessage() != null) {

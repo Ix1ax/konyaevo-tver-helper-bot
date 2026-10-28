@@ -70,8 +70,15 @@ public class CallbackRouter {
         }
         UserSettings user = scheduleService.getOrCreateUser(chatId);
         if (activity != null) activity.record(chatId);
-        // Старое сообщение не должно откатывать текущий профиль и настройки.
-        if (user.getMessageId() != null && user.getMessageId() != messageId && !data.startsWith("admin:")) return;
+        // Кнопка из другого сообщения (/help, /donate, «Спасибо за поддержку», старое меню): нажатое сообщение
+        // становится текущим экраном, у прежнего кнопки пропадают. Переходы выполняются как обычно, а действия,
+        // меняющие профиль и настройки, — нет: старое сообщение не должно их откатывать, вместо них показываем меню.
+        if (user.getMessageId() != null && user.getMessageId() != messageId && !data.startsWith("admin:")) {
+            messageSender.removeKeyboard(chatId, user.getMessageId());
+            if (!navigation(data)) data = "dashboard";
+            user.setMessageId(messageId);
+            scheduleService.saveUser(user);
+        }
         user.setMessageId(messageId);
         pendingTime.remove(chatId);
         if (!data.startsWith("notify:time:") && !data.equals("notify:custom_time")) preserveChangesOnTime.remove(chatId);
@@ -320,6 +327,11 @@ public class CallbackRouter {
         String backCallback = isTeacher ? "back:tactions:" + name : "back:sactions:" + name;
         messageSender.editMessage(chatId, messageId, text,
                 KeyboardFactory.buildScheduleKeyboard());
+    }
+
+    /** Переходы между экранами: безопасно выполнять из любого сообщения, они ничего не меняют в профиле. */
+    static boolean navigation(String data) {
+        return data.equals("dashboard") || data.equals("help") || data.startsWith("view:");
     }
 
     // ===== Public helpers for auto-login from KonyaevoBot =====
