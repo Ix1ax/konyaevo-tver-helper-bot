@@ -36,7 +36,7 @@ public class MascotService {
     enum Task {
         OPEN(1, "Открыть расписание", null, 10),
         TOMORROW(2, "Заглянуть во «Завтра» вечером", "после 18:00", 15),
-        SHARE(4, "Поделиться расписанием", null, 20);
+        SHARE(4, "Поделиться расписанием", "отправить в чат или сохранить картинку", 20);
         final int bit, xp; final String title, hint;
         Task(int bit, String title, String hint, int xp) { this.bit = bit; this.title = title; this.hint = hint; this.xp = xp; }
     }
