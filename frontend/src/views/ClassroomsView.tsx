@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { LoadingIndicator } from '../components/Ui';
 import { Header } from '../components/Header';
@@ -7,6 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import { selectedWeekDate } from '../utils/calendar';
 import { api } from '../api/client';
 import { SEARCH_TABS, TabSwitch } from '../components/TabSwitch';
+import { Pager, usePage } from '../components/Pager';
 import type { ClassroomsResponse } from '../types';
 
 const SLOTS = [1, 2, 3, 4, 5, 6];
@@ -45,16 +46,22 @@ export function ClassroomsView() {
     return () => { active = false; };
   }, [day, slot, weekType]);
 
+  // Номера по порядку (2 раньше 13 и 103): по страницам так легче найти нужную аудиторию.
+  const byRoom = (a: string, b: string) => a.localeCompare(b, 'ru', { numeric: true });
   const free = (data?.freeRooms || []).filter((room) =>
     room.toLowerCase().includes(query.toLowerCase())
-  );
+  ).sort(byRoom);
   const occupied = (data?.occupiedRooms || []).filter((room) =>
     [room.room, room.teacher, room.subject, room.groupName].some((value) =>
       value.toLowerCase().includes(query.toLowerCase())
     )
-  );
+  ).sort((a, b) => byRoom(a.room, b.room));
 
   const selectedDate = selectedWeekDate(day, info.serverTime);
+  const filters = `${day}|${slot}|${query}`;
+  const freeList = useRef<HTMLDivElement>(null), occupiedList = useRef<HTMLDivElement>(null);
+  const freePage = usePage(free, 16, filters);
+  const occupiedPage = usePage(occupied, 8, filters);
 
   return (
     <div className="page animate-fade-in select-none">
@@ -147,7 +154,7 @@ export function ClassroomsView() {
       ) : (
         <>
           {/* SECTION: СВОБОДНО (matching blue-bordered badge grid in reference) */}
-          <div className="mb-6">
+          <div ref={freeList} className="mb-6 scroll-mt-4">
             <h2 className="text-xs font-black font-unbounded uppercase tracking-wider text-theme-subtext opacity-80 mb-3 flex items-center gap-1.5">
               <span>СВОБОДНО</span>
               <span className="opacity-40">·</span>
@@ -156,7 +163,7 @@ export function ClassroomsView() {
 
             {free.length ? (
               <div className="grid grid-cols-4 sm:grid-cols-5 gap-2.5">
-                {free.map((room) => (
+                {freePage.items.map((room) => (
                   <div
                     key={room}
                     className="py-2.5 px-2 rounded-2xl border-2 border-blue-500/70 text-blue-400 bg-blue-500/10 font-black text-lg font-unbounded flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.15)] active:scale-95 transition cursor-default"
@@ -170,10 +177,11 @@ export function ClassroomsView() {
                 На эту пару свободных аудиторий не найдено
               </div>
             )}
+            <Pager {...freePage} anchor={freeList} label="Страницы свободных аудиторий" />
           </div>
 
           {/* SECTION: ЗАНЯТО */}
-          <div>
+          <div ref={occupiedList} className="scroll-mt-4">
             <h2 className="text-xs font-black font-unbounded uppercase tracking-wider text-theme-subtext opacity-80 mb-3 flex items-center gap-1.5">
               <span>ЗАНЯТО</span>
               <span className="opacity-40">·</span>
@@ -181,7 +189,7 @@ export function ClassroomsView() {
             </h2>
 
             <div className="space-y-2 room-results">
-              {occupied.map((room, idx) => {
+              {occupiedPage.items.map((room, idx) => {
                 const endTime = room.time?.includes('-') ? room.time.split('-')[1].trim() : '14:30';
                 return (
                   <div
@@ -207,6 +215,7 @@ export function ClassroomsView() {
                 );
               })}
             </div>
+            <Pager {...occupiedPage} anchor={occupiedList} label="Страницы занятых аудиторий" />
           </div>
         </>
       )}
