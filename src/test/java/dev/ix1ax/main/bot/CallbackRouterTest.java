@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.telegram.telegrambots.meta.api.objects.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
 class CallbackRouterTest {
     private final ScheduleService service = mock(ScheduleService.class);
@@ -18,13 +19,29 @@ class CallbackRouterTest {
         CallbackQuery query = new CallbackQuery(); query.setMessage(message); query.setFrom(from); query.setData(data);
         return query;
     }
-    @Test void ignoresOldMessagesAndOtherSenders() {
-        UserSettings user = new UserSettings(42L); user.setMessageId(10);
+    @Test void oldMessagesNeverChangeSettingsButShowCurrentMenu() {
+        UserSettings user = new UserSettings(42L); user.setMessageId(10); user.setRole("student"); user.setGroupName("1-ИС");
+        user.setNotifyEnabled(true);
         when(service.getOrCreateUser(42L)).thenReturn(user);
         router.route(click("notify:disable", 9));
-        verify(service, never()).saveUser(any()); verifyNoInteractions(sender);
-        CallbackQuery foreign = click("role:student", 10); foreign.getFrom().setId(43L);
+        assertEquals(Boolean.TRUE, user.getNotifyEnabled(), "кнопка старого сообщения не меняет настройки");
+        assertEquals(9, user.getMessageId());
+        verify(sender).removeKeyboard(42L, 10);
+        verify(sender).editMessage(eq(42L), eq(9), anyString(), any());
+        CallbackQuery foreign = click("role:student", 9); foreign.getFrom().setId(43L);
+        clearInvocations(service);
         router.route(foreign); verify(service, never()).saveUser(any());
+    }
+    @Test void navigationWorksFromStandaloneMessages() {
+        UserSettings user = new UserSettings(42L); user.setMessageId(10); user.setRole("student"); user.setGroupName("1-ИС");
+        when(service.getOrCreateUser(42L)).thenReturn(user);
+        // «‹ Меню» под сообщением «Спасибо за поддержку» или /help.
+        router.route(click("dashboard", 77));
+        assertEquals(77, user.getMessageId());
+        verify(sender).removeKeyboard(42L, 10);
+        verify(sender).editMessage(eq(42L), eq(77), anyString(), any());
+        assertTrue(CallbackRouter.navigation("view:today") && CallbackRouter.navigation("help"));
+        assertFalse(CallbackRouter.navigation("role:student") || CallbackRouter.navigation("notify:disable"));
     }
     @Test void typedTimeOnlyWorksAfterPromptAndBackCancelsIt() {
         UserSettings user = new UserSettings(42L); user.setMessageId(10); user.setRole("student"); user.setGroupName("1-ИС");

@@ -87,18 +87,21 @@ public class MessageSender {
             Integer oldId = user.getMessageId();
             user.setMessageId(sent.getMessageId());
             if (screen == null) screens.remove(chatId); else screens.put(chatId, screen);
-            if (oldId != null && !oldId.equals(sent.getMessageId())) {
-                try {
-                    telegram.call(sender -> sender.execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
-                            .chatId(Long.toString(chatId)).messageId(oldId)
-                            .replyMarkup(new InlineKeyboardMarkup(java.util.List.of())).build()));
-                } catch (Exception ignored) { /* Старое сообщение могло быть удалено пользователем. */ }
-            }
+            if (oldId != null && !oldId.equals(sent.getMessageId())) removeKeyboard(chatId, oldId);
             scheduleService.saveUser(user);
             log.info("[SENT SUCCESS] {} to chatId: {} (msgId: {})", logContext, chatId, sent.getMessageId());
         } catch (Exception e) {
             logSendError(e, logContext, chatId);
         }
+    }
+
+    /** Убирает кнопки у прежнего экрана: в чате остаётся одно сообщение с живым меню. */
+    public void removeKeyboard(long chatId, int messageId) {
+        try {
+            telegram.call(sender -> sender.execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
+                    .chatId(Long.toString(chatId)).messageId(messageId)
+                    .replyMarkup(new InlineKeyboardMarkup(java.util.List.of())).build()));
+        } catch (Exception ignored) { /* Старое сообщение могло быть удалено пользователем. */ }
     }
 
     /**
