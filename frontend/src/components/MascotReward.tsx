@@ -13,10 +13,28 @@ export function MascotReward() {
   const rewards = mascot?.rewards ?? [];
   const streak = rewards.find(reward => reward.type === 'streak');
   const level = rewards.find(reward => reward.type === 'level');
+  const donation = rewards.find(reward => reward.type === 'donation');
   useEffect(() => { if (rewards.length) haptic.notification('success'); }, [rewards.length]);
   if (!mascot || !rewards.length) return null;
 
+  // Облик за поддержку бот уже надел — кнопка «Надеть» не нужна.
+  const gift = donation?.look ? mascot.looks.find(item => item.id === donation.look) : undefined;
   const look = level?.look ? mascot.looks.find(item => item.id === level.look) : undefined;
+  if (donation) return <div className="share-overlay" role="dialog" aria-modal="true" aria-labelledby="mascot-reward-title">
+    <div className="share-dialog mascot-reward support-reward">
+      {CONFETTI.map(([color, x, y, angle], index) => <i key={index} className="mascot-confetti" style={{ background: color, left: `${x}%`, top: `${y}%`, transform: `rotate(${angle}deg)` }} />)}
+      <Mascot size={170} look={gift?.id ?? mascot.look} mood="proud" pose="wave" extra={['sparkles']} className="mx-auto" />
+      <h2 id="mascot-reward-title" className="font-unbounded text-2xl font-black mt-1">Спасибо!</h2>
+      <p className="text-sm text-theme-subtext leading-relaxed mt-2">
+        Ты поддержал Парыча на {donation.value} ⭐. {gift ? `Парыч получил облик «${gift.name}» и уже его надел.` : 'Парыч передаёт огромный привет!'}
+      </p>
+      <div className="mascot-reward-chips">
+        <span className="font-unbounded">{donation.value} ⭐</span>
+        {gift && <span className="mascot-reward-look"><Gift size={14} />Облик «{gift.name}»</span>}
+      </div>
+      <button className="button-primary w-full" onClick={acknowledgeRewards}>Ура!</button>
+    </div>
+  </div>;
   const wear = () => { if (look) updateSettings({ look: look.id }).catch(() => { /* Облик можно выбрать на экране Парыча. */ }); acknowledgeRewards(); };
 
   return <div className="share-overlay" role="dialog" aria-modal="true" aria-labelledby="mascot-reward-title">

@@ -82,7 +82,7 @@ export interface ClassroomsResponse {
   allRooms: string[];
 }
 
-export type MascotLookId = 'classic' | 'autumn' | 'winter' | 'spring' | 'summer' | 'graduate';
+export type MascotLookId = 'classic' | 'autumn' | 'winter' | 'spring' | 'summer' | 'graduate' | 'star' | 'crown';
 
 /** Огонёк и прогресс Парыча, считается на сервере по московскому времени. */
 export interface MascotState {
@@ -100,7 +100,10 @@ export interface MascotState {
   nextLevelXp: number;
   tasks: { id: string; title: string; hint: string | null; xp: number; done: boolean }[];
   look: MascotLookId;
-  looks: { id: MascotLookId; name: string; level: number; unlocked: boolean }[];
+  /** stars > 0 — облик поддержки: открывается суммой пожертвований звёздами, а не уровнем. */
+  looks: { id: MascotLookId; name: string; level: number; stars: number; unlocked: boolean }[];
   reminder: boolean;
-  rewards: { type: 'streak' | 'level'; value: number; look: MascotLookId | null }[];
+  rewards: { type: 'streak' | 'level' | 'donation'; value: number; look: MascotLookId | null }[];
+  /** Сколько звёзд всего пожертвовал пользователь. */
+  donated: number;
 }

@@ -32,6 +32,7 @@ export function BottomNav() {
     <div className="max-w-lg mx-auto flex items-end pt-1.5 pb-[max(env(safe-area-inset-bottom),10px)] px-2">
       {left.map(tab)}
       <button className="nav-parych" aria-current={activeTab === 'mascot' ? 'page' : undefined} data-waiting={waiting || undefined}
+        data-supporter={(mascot?.donated ?? 0) > 0 || undefined}
         aria-label={mascot ? `Парыч. Огонёк: ${mascot.streak} дней подряд` : 'Парыч'}
         onClick={() => { haptic.impact('medium'); setActiveTab('mascot'); }}>
         <span className="nav-parych-orb">

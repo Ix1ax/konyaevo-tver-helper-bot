@@ -5,6 +5,7 @@ import { EmptyState } from './Ui';
 import { MascotTip } from './MascotTip';
 import { ShareButton } from './ShareButton';
 import { DAY_TABS, TabSwitch } from './TabSwitch';
+import { SupportCard } from './SupportParych';
 import { ArrowRightLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -15,7 +16,7 @@ export function ScheduleDay({ tomorrow = false }: { tomorrow?: boolean }) {
   const lessons = (schedule[day]?.lessons || []).filter((lesson) => !lesson.weekType || lesson.weekType === (red ? 'red' : 'blue'));
   const changed = lessons.some((lesson) => lesson.changed);
   return <div className="page animate-fade-in">
-    <Header title={tomorrow ? 'Завтра' : 'Сегодня'} showGreeting={!tomorrow} action={<ShareButton />} />
+    <Header title={tomorrow ? 'Завтра' : 'Сегодня'} showGreeting={!tomorrow} action={<ShareButton />} support />
     <TabSwitch items={DAY_TABS} />
     {day ? <>
       {tomorrow && <p className="text-sm text-theme-subtext mb-4">{day} · {red ? 'Красная' : 'Синяя'} неделя</p>}
@@ -33,6 +34,7 @@ export function ScheduleDay({ tomorrow = false }: { tomorrow?: boolean }) {
       <SummaryCard lessons={lessons} dayName={day} />
       {lessons.length ? lessons.map((lesson, index) => <LessonCard key={`${lesson.lessonNumber}-${lesson.groupName}-${index}`} lesson={lesson} highlightCurrent={!tomorrow} />)
         : <EmptyState mascot>На этот день занятий не запланировано.</EmptyState>}
+      {!tomorrow && <SupportCard />}
     </> : <><EmptyState mascot title="Выходной">Занятий нет. Расписание на другие дни доступно во вкладке «Неделя».</EmptyState>
       <button className="button-quiet w-full" onClick={() => setActiveTab('week')}>Расписание на неделю</button></>}
   </div>;

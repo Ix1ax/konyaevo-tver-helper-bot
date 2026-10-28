@@ -167,4 +167,26 @@ class MascotServiceTest {
         assertEquals("11 дней", MascotService.days(11));
         assertEquals("22 дня", MascotService.days(22));
     }
+
+    @Test void donationsOpenSupporterLooksAndShowRewardOnce() {
+        assertFalse(mascot.state(42, MON).looks().stream().filter(l -> l.id().equals("star")).findFirst().orElseThrow().unlocked());
+        assertThrows(IllegalArgumentException.class, () -> mascot.settings(42, "star", null, MON));
+        assertEquals("star", mascot.addDonation(42, 50));
+        var state = mascot.state(42, MON);
+        assertEquals(50, state.donated());
+        assertEquals("star", state.look());
+        assertEquals(new MascotService.Reward("donation", 50, "star"), state.rewards().get(0));
+        assertFalse(state.looks().stream().filter(l -> l.id().equals("crown")).findFirst().orElseThrow().unlocked());
+        // Корона — от 250 звёзд всего: 50 + 100 ещё мало, + 100 хватает.
+        assertNull(mascot.addDonation(42, 100));
+        assertEquals("crown", mascot.addDonation(42, 100));
+        state = mascot.state(42, MON);
+        assertEquals(250, state.donated());
+        assertEquals("crown", state.look());
+        assertEquals(3, state.rewards().size());
+        assertEquals(null, state.rewards().get(1).look());
+        mascot.settings(42, "star", null, MON);
+        assertEquals("star", mascot.state(42, MON).look());
+        assertTrue(mascot.acknowledgeRewards(42, MON).rewards().isEmpty());
+    }
 }

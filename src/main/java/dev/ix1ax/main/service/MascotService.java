@@ -40,18 +40,25 @@ public class MascotService {
         final int bit, xp; final String title, hint;
         Task(int bit, String title, String hint, int xp) { this.bit = bit; this.title = title; this.hint = hint; this.xp = xp; }
     }
-    record Look(String id, String name, int level) {}
+    /** Облик открывается уровнем или, если задано stars, суммой пожертвований звёздами. */
+    record Look(String id, String name, int level, int stars) {
+        Look(String id, String name, int level) { this(id, name, level, 0); }
+        boolean unlocked(int level, int donated) { return stars > 0 ? donated >= stars : this.level <= level; }
+    }
+    static final int CROWN_STARS = 250;
     static final List<Look> LOOKS = List.of(new Look("classic", "Обычный", 1), new Look("autumn", "Осень", 2),
             new Look("winter", "Зима", 3), new Look("spring", "Весна", 4), new Look("summer", "Лето", 5),
-            new Look("graduate", "Выпускник", MAX_LEVEL));
+            new Look("graduate", "Выпускник", MAX_LEVEL),
+            new Look("star", "Звёздный", 1, 1), new Look("crown", "Корона", 1, CROWN_STARS));
 
     public record WeekDay(String label, String state) {}
     public record TaskView(String id, String title, String hint, int xp, boolean done) {}
-    public record LookView(String id, String name, int level, boolean unlocked) {}
+    public record LookView(String id, String name, int level, int stars, boolean unlocked) {}
     public record Reward(String type, int value, String look) {}
     public record State(int streak, int best, int freezes, int maxFreezes, boolean countedToday, boolean studyDay,
                         List<WeekDay> week, int xp, int level, String levelName, int levelXp, int nextLevelXp,
-                        List<TaskView> tasks, String look, List<LookView> looks, boolean reminder, List<Reward> rewards) {}
+                        List<TaskView> tasks, String look, List<LookView> looks, boolean reminder, List<Reward> rewards,
+                        int donated) {}
 
     private final MascotProgressRepository repository;
     private final UserSettingsRepository users;
@@ -202,7 +209,7 @@ public class MascotService {
         if (look != null) {
             Look selected = LOOKS.stream().filter(item -> item.id().equals(look)).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Неизвестный облик"));
-            if (selected.level() > levelFor(progress.getXp())) throw new IllegalArgumentException("Облик ещё не открыт");
+            if (!selected.unlocked(levelFor(progress.getXp()), progress.getDonatedStars())) throw new IllegalArgumentException("Облик ещё не открыт");
             progress.setLook(look);
         }
         if (reminder != null) progress.setReminderEnabled(reminder);
@@ -239,19 +246,43 @@ public class MascotService {
         List<TaskView> tasks = Arrays.stream(Task.values()).map(task -> new TaskView(task.name().toLowerCase(Locale.ROOT),
                 task.title, task.hint, task.xp, (tasksDone & task.bit) != 0)).toList();
         int level = levelFor(progress.getXp());
-        List<LookView> looks = LOOKS.stream().map(look -> new LookView(look.id(), look.name(), look.level(), look.level() <= level)).toList();
+        List<LookView> looks = LOOKS.stream().map(look -> new LookView(look.id(), look.name(), look.level(), look.stars(),
+                look.unlocked(level, progress.getDonatedStars()))).toList();
         List<Reward> rewards = new ArrayList<>();
         if (progress.getPendingReward() != null) for (String item : progress.getPendingReward().split(",")) {
             String[] parts = item.split(":");
-            if (parts.length != 2) continue;
+            if (parts.length < 2) continue;
             int value = Integer.parseInt(parts[1]);
-            String look = "level".equals(parts[0]) ? LOOKS.stream().filter(l -> l.level() == value).map(Look::id).findFirst().orElse(null) : null;
+            String look = "level".equals(parts[0]) ? LOOKS.stream().filter(l -> l.stars() == 0 && l.level() == value).map(Look::id).findFirst().orElse(null)
+                    : parts.length > 2 && !parts[2].isEmpty() ? parts[2] : null;
             rewards.add(new Reward(parts[0], value, look));
         }
         return new State(alive ? progress.getStreak() : 0, progress.getBestStreak(), progress.getFreezes(), MAX_FREEZES,
                 counted, studyDay.test(today), week, progress.getXp(), level, LEVEL_NAMES[level - 1], levelStart(level),
                 level == MAX_LEVEL ? levelStart(level) : levelStart(level + 1), tasks, progress.getLook(), looks,
-                progress.isReminderEnabled(), rewards);
+                progress.isReminderEnabled(), rewards, progress.getDonatedStars());
+    }
+
+    /**
+     * Учитывает пожертвование: открывает облики поддержки, надевает самый новый из открытых
+     * и оставляет награду для показа в приложении. Возвращает открытый облик или null.
+     */
+    public synchronized String addDonation(long id, int stars) {
+        MascotProgress progress = load(id);
+        int before = progress.getDonatedStars(), after = before + stars;
+        progress.setDonatedStars(after);
+        String opened = LOOKS.stream().filter(look -> look.stars() > before && look.stars() <= after)
+                .max(Comparator.comparingInt(Look::stars)).map(Look::id).orElse(null);
+        if (opened != null) progress.setLook(opened);
+        String reward = "donation:" + stars + ":" + (opened == null ? "" : opened);
+        String pending = progress.getPendingReward();
+        progress.setPendingReward(pending == null || pending.isBlank() ? reward : pending + "," + reward);
+        repository.save(progress);
+        return opened;
+    }
+
+    public String lookName(String id) {
+        return LOOKS.stream().filter(look -> look.id().equals(id)).map(Look::name).findFirst().orElse(id);
     }
 
     @Scheduled(cron = "0 0 21 * * MON-FRI", zone = "Europe/Moscow")
