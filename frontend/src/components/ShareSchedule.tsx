@@ -9,6 +9,13 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
   // Обработчик Telegram подписывается один раз, поэтому свежий колбэк берём из ref.
   const sharedCallback = useRef(onShared);
   sharedCallback.current = onShared;
+  // Задание засчитывается один раз за открытие окна, каким бы путём Telegram ни сообщил об успехе.
+  const credited = useRef(false);
+  const credit = () => {
+    if (credited.current) return;
+    credited.current = true;
+    sharedCallback.current?.();
+  };
   const [choice, setChoice] = useState(0);
   // Parent renders recreate option objects; only changed export data should regenerate the image.
   const optionsKey = JSON.stringify(choices?.[choice]?.options || baseOptions);
@@ -34,7 +41,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
     if (!open) return;
     let active = true;
     let url = '';
-    setImage(null); setPrepared(null); setError('');
+    setImage(null); setPrepared(null); setError(''); credited.current = false;
     renderScheduleImages(options, telegramShare).then(({png:blob, jpeg:upload}) => {
       if (!active) return;
       url = URL.createObjectURL(blob);
@@ -87,7 +94,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
         setError(`Telegram не отправил картинку (${reason}). Попробуйте ещё раз.`);
       }
     };
-    const sent = () => { diagnostic('share_sent'); sharedCallback.current?.(); };
+    const sent = () => { diagnostic('share_sent'); credit(); };
     tg.onEvent('shareMessageFailed', failed);
     tg.onEvent('shareMessageSent', sent);
     return () => { tg.offEvent?.('shareMessageFailed', failed); tg.offEvent?.('shareMessageSent', sent); };
@@ -101,11 +108,12 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
         try {
           // Telegram releases its popup lock when it reports acceptance OR cancellation.
           diagnostic('download_call');
-          tg.downloadFile({ url: message.imageUrl, file_name: 'konyaevo-schedule.jpg' }, (accepted: boolean) => { diagnostic('download_callback', String(accepted)); finishOperation(); });
+          tg.downloadFile({ url: message.imageUrl, file_name: 'konyaevo-schedule.jpg' }, (accepted: boolean) => { diagnostic('download_callback', String(accepted)); if (accepted) credit(); finishOperation(); });
         } catch (error) {
           if (error instanceof Error && error.message === 'WebAppDownloadFilePopupOpened') {
             // Some clients fail to report closing the native popup. Open the same file normally.
             tg.openLink(message.imageUrl);
+            credit();
             finishOperation();
           } else throw error;
         }
@@ -118,6 +126,7 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
     }
     const a = document.createElement('a'); a.href = image.url; a.download = image.file.name;
     document.body.append(a); a.click(); a.remove();
+    credit();
   };
   const share = async () => {
     if (!image || operation.current) return;
@@ -126,10 +135,11 @@ export function ShareSchedule({ options: baseOptions, disabled = false, fullWidt
       if (telegramShare) {
         const message = await prepare();
         diagnostic('share_call');
-        tg.shareMessage(message.id, (sent: boolean) => { diagnostic('share_callback', String(sent)); finishOperation(); });
+        // Часть клиентов не присылает событие shareMessageSent, а сообщает об отправке только здесь.
+        tg.shareMessage(message.id, (sent: boolean) => { diagnostic('share_callback', String(sent)); if (sent) credit(); finishOperation(); });
       } else {
         await navigator.share({ files: [image.file], title: `Коняево · ${options.target}`, text: scheduleCaption(options) });
-        sharedCallback.current?.();
+        credit();
         finishOperation();
       }
     } catch (error) {
