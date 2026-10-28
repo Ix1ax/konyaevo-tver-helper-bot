@@ -7,7 +7,7 @@ import {
   TeachersResponse,
   UserRole,
 } from '../types';
-import { api, profileRequest, signedRequest } from '../api/client';
+import { api, ApiUnavailableError, profileRequest, signedRequest } from '../api/client';
 import { useTelegram } from '../hooks/useTelegram';
 
 interface AppContextType {
@@ -182,7 +182,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       if (version === requestVersion.current) {
         setSchedule({});
-        setLoadError('Не удалось загрузить данные. Проверьте подключение и обновите расписание.');
+        // Сеть и ошибка сервера требуют разных действий от пользователя.
+        setLoadError(e instanceof ApiUnavailableError
+          ? 'Телефон не достучался до сервера. Чаще всего мешает VPN или ограничения мобильного интернета: выключите VPN или переключитесь на Wi‑Fi.'
+          : 'Сервер ответил с ошибкой. Попробуйте ещё раз чуть позже.');
       }
       return false;
     } finally {

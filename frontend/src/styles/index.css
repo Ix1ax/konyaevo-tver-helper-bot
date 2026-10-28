@@ -326,3 +326,11 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .mascot-reward-chips .mascot-reward-look { color: #ffb347; background: rgba(255, 154, 46, .14); }
 .theme-light .mascot-reward-chips span { color: var(--color-accent); }
 .theme-light .mascot-reward-chips .mascot-reward-look { color: #c2410c; }
+
+/* Ошибка загрузки: причина и два выхода — повтор и расписание в чате. */
+.load-error { border-radius: 24px; padding: 24px 20px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.load-error .icon-badge { color: var(--color-red); margin-bottom: 14px; }
+.load-error h3 { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.load-error p { font-size: 13.5px; line-height: 1.55; color: var(--color-subtext); max-width: 340px; }
+.load-error-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 18px; }
+@media (max-width: 340px) { .load-error-actions { grid-template-columns: 1fr; } }
