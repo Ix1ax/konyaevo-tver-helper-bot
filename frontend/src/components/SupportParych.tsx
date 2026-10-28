@@ -94,7 +94,8 @@ function SupportSheet({ onClose }: { onClose: () => void }) {
     <section role="dialog" aria-modal="true" aria-labelledby="support-title" className="share-dialog surface">
       <div className="flex items-center justify-between gap-3 mb-2"><h2 id="support-title" className="font-semibold">Поддержать Парыча</h2>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><X /></button></div>
-      <SupportPanel />
+      {/* После оплаты окно закрывается: под ним откроется «Спасибо!» с новым обликом. */}
+      <SupportPanel onDone={onClose} />
     </section>
   </div>, document.body);
 }
