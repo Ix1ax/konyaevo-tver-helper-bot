@@ -2,13 +2,11 @@ import React from 'react';
 import { RefreshCw, CalendarDays } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTelegram } from '../hooks/useTelegram';
-import { useMascot } from '../context/MascotContext';
 import { FlameIcon } from './Mascot';
 
 export function Header({ title, showGreeting = true, action }: { title?: string; showGreeting?: boolean; action?: React.ReactNode }) {
   const { role, selectedGroup, selectedTeacher, info, refreshing, refreshAll, setActiveTab } = useApp();
   const { user, haptic } = useTelegram();
-  const { mascot } = useMascot();
   const name = (role === 'student' ? selectedGroup : selectedTeacher) || 'Выбрать';
   const initial = user?.first_name ? user.first_name.charAt(0).toUpperCase() : (name.charAt(0) || 'К');
 
@@ -17,7 +15,7 @@ export function Header({ title, showGreeting = true, action }: { title?: string;
     onProfile={() => { haptic.impact('light'); setActiveTab('profile'); }}
     onWeek={() => { haptic.impact('light'); setActiveTab('week'); }}
     onRefresh={() => { haptic.impact('light'); refreshAll(); }}
-    streak={mascot?.streak} streakCounted={mascot?.countedToday} onStreak={() => setActiveTab('mascot')} />;
+    />;
 }
 
 export function HeaderContent({title, showGreeting = true, action, name, initial = 'К', photoUrl, red = false, refreshing = false, hideAvatar = false, subtitle, identityLabel,
@@ -80,8 +78,8 @@ export function HeaderContent({title, showGreeting = true, action, name, initial
 
       {/* Main Title Row with Square Action Buttons */}
       <div className="flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-3xl font-black font-unbounded tracking-tight text-theme-text leading-tight">
+        <div className="min-w-0">
+          <h2 className="text-3xl font-black font-unbounded tracking-tight text-theme-text leading-tight truncate">
             {title}
           </h2>
           {subtitle ? <p className="text-sm font-semibold text-theme-subtext mt-0.5">{subtitle}</p> : showGreeting ? (
@@ -97,7 +95,7 @@ export function HeaderContent({title, showGreeting = true, action, name, initial
         </div>
 
         {/* Action Buttons: Week switcher / Refresh */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {action}
           <button
             onClick={onWeek}

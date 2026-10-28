@@ -1,27 +1,27 @@
-import { Calendar, CalendarCheck, CalendarDays, Building2, Search, UserRound, ShieldCheck } from 'lucide-react';
+import { Calendar, CalendarDays, Search, UserRound, ShieldCheck } from 'lucide-react';
 import type { ActiveTab } from '../types';
-import { ShareSchedule } from './ShareSchedule';
-import { useTheme } from '../context/ThemeContext';
-import { moscowDayDate } from '../utils/calendar';
 import { useApp } from '../context/AppContext';
 import { useMascot } from '../context/MascotContext';
+import { useTelegram } from '../hooks/useTelegram';
+import { FlameIcon, Mascot } from './Mascot';
 
-const items = [
-  ['today', 'Сегодня', Calendar], ['tomorrow', 'Завтра', CalendarCheck], ['week', 'Неделя', CalendarDays],
-  ['classrooms', 'Кабинеты', Building2], ['teachers', 'Поиск', Search], ['profile', 'Профиль', UserRound],
-] as const;
+// Соседние экраны живут в одной вкладке: «Завтра» — внутри «Сегодня», «Кабинеты» — внутри «Поиска».
+const left = [['today', 'Расписание', Calendar, ['today', 'tomorrow']], ['week', 'Неделя', CalendarDays, ['week']]] as const;
+const right = [['teachers', 'Поиск', Search, ['teachers', 'classrooms']], ['profile', 'Профиль', UserRound, ['profile']]] as const;
 
 export function BottomNav() {
-  const { activeTab, setActiveTab, isAdmin, role, selectedGroup, selectedTeacher, schedule, info, refreshing, loading } = useApp();
-  const { currentThemeDef } = useTheme();
-  const { sendEvent } = useMascot();
-  const choices = [false,true].map(tomorrow => {
-    const day = tomorrow ? info.tomorrowName : info.todayName;
-    const red = tomorrow ? info.tomorrowRedWeek ?? info.isRedWeek : info.isRedWeek;
-    return {label: tomorrow ? 'Завтра' : 'Сегодня', options: {target:role === 'student' ? selectedGroup : selectedTeacher,
-      role, day:day || 'Выходной', date:moscowDayDate(info.serverTime,tomorrow ? 1 : 0), red, isLight:currentThemeDef.isLight,
-      highlightCurrent:!tomorrow, lessons:(schedule[day]?.lessons || []).filter(lesson=>!lesson.weekType || lesson.weekType === (red ? 'red' : 'blue'))}};
-  });
+  const { activeTab, setActiveTab, isAdmin } = useApp();
+  const { mascot, look } = useMascot();
+  const { haptic } = useTelegram();
+  const tab = ([id, label, Icon, group]: typeof left[number] | typeof right[number]) => {
+    const current = (group as readonly string[]).includes(activeTab);
+    return <button key={id} onClick={() => setActiveTab(id as ActiveTab)} aria-current={current ? 'page' : undefined}
+      className={`nav-tab ${current ? 'text-theme-accent' : 'text-theme-subtext'}`}>
+      <Icon aria-hidden="true" /><span>{label}</span>
+    </button>;
+  };
+  // Огонёк ждёт: учебный день, а расписание сегодня ещё не открывали.
+  const waiting = Boolean(mascot && mascot.studyDay && !mascot.countedToday);
   return <nav aria-label="Основная навигация" className="fixed bottom-0 inset-x-0 glass-nav border-t border-theme-border z-50">
     {isAdmin && <div className="max-w-lg mx-auto px-3 pt-2">
       <button className="button-quiet w-full flex items-center justify-center gap-2 text-xs"
@@ -29,16 +29,20 @@ export function BottomNav() {
         <ShieldCheck size={20} /> Администрирование
       </button>
     </div>}
-    <div className="max-w-lg mx-auto px-3 pt-2">
-      <ShareSchedule fullWidth options={choices[0].options} choices={choices} disabled={refreshing || loading || !choices[0].options.target}
-        onShared={() => sendEvent('share')} />
-    </div>
-    <div className="max-w-lg mx-auto flex pt-2 pb-[max(env(safe-area-inset-bottom),10px)] px-2">
-      {items.map(([tab, label, Icon]) => <button key={tab} onClick={() => setActiveTab(tab as ActiveTab)}
-        aria-current={activeTab === tab ? 'page' : undefined}
-        className={`flex-1 flex flex-col items-center justify-center gap-1.5 min-h-[52px] rounded-xl ${activeTab === tab ? 'text-theme-accent' : 'text-theme-subtext'}`}>
-        <Icon aria-hidden="true" /><span className="text-[10px] font-medium">{label}</span>
-      </button>)}
+    <div className="max-w-lg mx-auto flex items-end pt-1.5 pb-[max(env(safe-area-inset-bottom),10px)] px-2">
+      {left.map(tab)}
+      <button className="nav-parych" aria-current={activeTab === 'mascot' ? 'page' : undefined} data-waiting={waiting || undefined}
+        aria-label={mascot ? `Парыч. Огонёк: ${mascot.streak} дней подряд` : 'Парыч'}
+        onClick={() => { haptic.impact('medium'); setActiveTab('mascot'); }}>
+        <span className="nav-parych-orb">
+          <Mascot size={66} look={look} pose="wave" mood={waiting ? 'think' : 'happy'} className="nav-parych-mascot" />
+        </span>
+        {mascot && <span className="nav-parych-streak font-unbounded" data-counted={mascot.countedToday || undefined}>
+          <FlameIcon size={14} />{mascot.streak}
+        </span>}
+        <span className="nav-parych-label">Парыч</span>
+      </button>
+      {right.map(tab)}
     </div>
   </nav>;
 }
