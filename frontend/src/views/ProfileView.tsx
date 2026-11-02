@@ -13,6 +13,7 @@ import { useTheme, THEMES } from '../context/ThemeContext';
 import { useTelegram } from '../hooks/useTelegram';
 import { profileRequest } from '../api/client';
 import { HelpPanel } from '../components/HelpPanel';
+import { HomeScreenRow } from '../components/HomeScreen';
 import { NotificationSettings } from '../components/NotificationSettings';
 
 export function ProfileView() {
@@ -254,7 +255,7 @@ export function ProfileView() {
           </div>
           <ChevronRight size={18} className="text-theme-subtext opacity-50" />
         </button>
-
+        <HomeScreenRow />
       </div>
 
       <HelpPanel />
