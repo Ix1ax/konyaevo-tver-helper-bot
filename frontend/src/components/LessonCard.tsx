@@ -128,12 +128,13 @@ export function LessonCardContent({ lesson, highlightCurrent = false, role = 'st
       {!!lesson.subgroups?.length && <div className="space-y-2 mb-3">
         {lesson.subgroups.map(subgroup => <div key={subgroup.number} className="surface rounded-xl p-3 text-xs">
           <p className="text-theme-subtext mb-2">{subgroup.number}-я подгруппа</p>
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" disabled={role !== 'student'} className="inline-flex items-center gap-1.5 text-left"
+          {/* Кабинет прижат вправо — у подгрупп он стоит в одной колонке, какой бы длинной ни была фамилия. */}
+          <div className="flex items-center gap-3">
+            <button type="button" disabled={role !== 'student'} className="inline-flex flex-1 min-w-0 items-center gap-1.5 text-left"
               onClick={() => { onTeacher(subgroup.teacher); }}>
-              <UserRound size={13} />{subgroup.teacher}
+              <UserRound size={13} className="shrink-0" /><span className="truncate">{subgroup.teacher}</span>
             </button>
-            <span className="inline-flex items-center gap-1.5 font-semibold"><MapPin size={13} />{subgroup.room}</span>
+            {subgroup.room && <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold tabular-nums"><MapPin size={13} />{subgroup.room}</span>}
           </div>
         </div>)}
       </div>}
