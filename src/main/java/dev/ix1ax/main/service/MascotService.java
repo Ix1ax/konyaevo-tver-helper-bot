@@ -9,6 +9,7 @@ import dev.ix1ax.main.repository.MascotProgressRepository;
 import dev.ix1ax.main.repository.UserSettingsRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -21,7 +22,7 @@ import java.util.function.Predicate;
 
 /**
  * Огонёк Парыча: серия учебных дней, в которые пользователь открыл расписание в боте или мини-аппе.
- * Выходные, дни без пар и каникулы серию не прерывают; пропуск закрывается заморозкой, если она есть.
+ * Выходные, дни без пар, праздники и каникулы серию не прерывают; пропуск закрывается заморозкой, если она есть.
  */
 @Service
 public class MascotService {
@@ -58,7 +59,7 @@ public class MascotService {
     public record State(int streak, int best, int freezes, int maxFreezes, boolean countedToday, boolean studyDay,
                         List<WeekDay> week, int xp, int level, String levelName, int levelXp, int nextLevelXp,
                         List<TaskView> tasks, String look, List<LookView> looks, boolean reminder, List<Reward> rewards,
-                        int donated) {}
+                        int donated, String dayOff) {}
 
     private final MascotProgressRepository repository;
     private final UserSettingsRepository users;
@@ -66,6 +67,7 @@ public class MascotService {
     private final MessageSender sender;
     /** Кому огонёк уже засчитан сегодня: повторная активность не обращается к базе. */
     private final Map<Long, LocalDate> checkedToday = new ConcurrentHashMap<>();
+    @Autowired(required = false) private DayOffService dayOffs;
 
     public MascotService(MascotProgressRepository repository, UserSettingsRepository users, ScheduleService schedule, MessageSender sender) {
         this.repository = repository; this.users = users; this.schedule = schedule; this.sender = sender;
@@ -79,11 +81,8 @@ public class MascotService {
         return level;
     }
 
-    /** Летние и новогодние каникулы не считаются учебными днями, даже если основное расписание опубликовано. */
-    static boolean isHoliday(LocalDate date) {
-        int month = date.getMonthValue(), day = date.getDayOfMonth();
-        return month == 7 || month == 8 || (month == 12 && day == 31) || (month == 1 && day <= 8);
-    }
+    /** Праздники и каникулы по календарю не считаются учебными днями, даже если основное расписание опубликовано. */
+    static boolean isHoliday(LocalDate date) { return DayOffService.holiday(date) != null; }
 
     static boolean isStudyDay(Map<String, DayScheduleDto> week, LocalDate date) {
         int index = date.getDayOfWeek().getValue() - 1;
@@ -104,7 +103,8 @@ public class MascotService {
             week = schedule.getBaseTeacherSchedule(user.getTeacherName());
         if (week == null || week.isEmpty()) return date -> false;
         Map<String, DayScheduleDto> days = week;
-        return date -> isStudyDay(days, date);
+        // Выходные, отмеченные администратором (каникулы колледжа, переносы), тоже не учебные.
+        return date -> isStudyDay(days, date) && (dayOffs == null || !dayOffs.isExtra(date));
     }
 
     /** Учебные дни строго между двумя датами. */
@@ -260,7 +260,8 @@ public class MascotService {
         return new State(alive ? progress.getStreak() : 0, progress.getBestStreak(), progress.getFreezes(), MAX_FREEZES,
                 counted, studyDay.test(today), week, progress.getXp(), level, LEVEL_NAMES[level - 1], levelStart(level),
                 level == MAX_LEVEL ? levelStart(level) : levelStart(level + 1), tasks, progress.getLook(), looks,
-                progress.isReminderEnabled(), rewards, progress.getDonatedStars());
+                progress.isReminderEnabled(), rewards, progress.getDonatedStars(),
+                dayOffs != null ? dayOffs.reason(today) : DayOffService.holiday(today));
     }
 
     /**

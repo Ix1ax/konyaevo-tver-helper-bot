@@ -32,6 +32,7 @@ export function MascotView() {
   const today = moscowWeekday();
   const status = mascot.countedToday ? 'Сегодня засчитан — так держать!'
     : mascot.studyDay ? 'Открой расписание сегодня, чтобы огонёк не погас'
+    : mascot.dayOff ? `${mascot.dayOff} — огонёк отдыхает`
     : 'Сегодня пар нет — огонёк не гаснет';
 
   return <div className="page mascot-page animate-fade-in">

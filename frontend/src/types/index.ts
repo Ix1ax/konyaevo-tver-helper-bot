@@ -95,6 +95,8 @@ export interface MascotState {
   maxFreezes: number;
   countedToday: boolean;
   studyDay: boolean;
+  /** Праздник или каникулы сегодня — огонёк отдыхает. */
+  dayOff?: string | null;
   week: { label: string; state: 'done' | 'freeze' | 'missed' | 'today' | 'future' | 'off' }[];
   xp: number;
   level: number;
