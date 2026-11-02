@@ -414,3 +414,8 @@ button.settings-row:hover, a.settings-row:hover { background: var(--color-card-h
 .bells-table tr[data-now] td { background: rgba(59, 130, 246, .12); }
 .bells-table tr[data-now] td:first-child { border-radius: 10px 0 0 10px; }
 .bells-table tr[data-now] td:last-child { border-radius: 0 10px 10px 0; }
+.home-offer { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 6px; margin-bottom: 14px; border-radius: 20px; }
+.home-offer-title { font-size: 14px; font-weight: 800; color: var(--color-text); }
+.home-offer-text { font-size: 12px; line-height: 1.4; color: var(--color-subtext); margin-top: 2px; }
+.home-offer-add { height: 32px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 800; color: #fff; background: var(--color-accent); }
+.home-offer-later { height: 32px; padding: 0 12px; border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--color-subtext); }

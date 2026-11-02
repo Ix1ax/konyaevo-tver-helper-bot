@@ -6,6 +6,7 @@ import { useTelegram } from '../hooks/useTelegram';
 import { FlameIcon, Mascot } from '../components/Mascot';
 import { EmptyState } from '../components/Ui';
 import { SupportPanel } from '../components/SupportParych';
+import { HomeScreenOffer } from '../components/HomeScreen';
 import type { MascotLookId } from '../types';
 
 const moscowWeekday = () => { const now = new Date(Date.now() + 3 * 3600000); return (now.getUTCDay() + 6) % 7; };
@@ -44,6 +45,7 @@ export function MascotView() {
       <p className="text-sm font-semibold text-theme-subtext">дней подряд с расписанием</p>
       <p className="mascot-status">{status}</p>
     </section>
+    <div className="mt-4"><HomeScreenOffer /></div>
 
     <section className="surface mascot-card">
       <div className="flex items-start justify-between gap-3">
