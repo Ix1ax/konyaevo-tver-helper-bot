@@ -40,6 +40,9 @@ export interface InfoResponse {
   tomorrowName: string;
   changesDate: string;
   serverTime: string;
+  /** Сокращённые пары сегодня / завтра (отмечает администратор). */
+  todayShort?: boolean;
+  tomorrowShort?: boolean;
 }
 
 export interface GroupsResponse {

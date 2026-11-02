@@ -1,12 +1,14 @@
 import type { Lesson } from '../types';
+import { Bell } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
-export function SummaryCard({ lessons }: { lessons: Lesson[]; dayName?: string }) {
+export function SummaryCard({ lessons, onBells }: { lessons: Lesson[]; dayName?: string; onBells?: () => void }) {
   const { currentThemeDef } = useTheme();
-  return <SummaryCardContent lessons={lessons} isLight={currentThemeDef.isLight} />;
+  return <SummaryCardContent lessons={lessons} isLight={currentThemeDef.isLight} onBells={onBells} />;
 }
 
-export function SummaryCardContent({ lessons, isLight = false }: { lessons: Lesson[]; isLight?: boolean }) {
+/** onBells — сводка нажимается и открывает звонки на день (колокольчик в углу). */
+export function SummaryCardContent({ lessons, isLight = false, onBells }: { lessons: Lesson[]; isLight?: boolean; onBells?: () => void }) {
   const currentThemeDef = { isLight };
   const active = lessons.filter((lesson) => !lesson.canceled);
   if (!active.length) return null;
@@ -16,9 +18,11 @@ export function SummaryCardContent({ lessons, isLight = false }: { lessons: Less
   const end = last[last.length - 1].trim();
   const count = new Set(active.map((lesson) => lesson.lessonNumber)).size;
 
+  const Root = onBells ? 'button' : 'div';
   return (
-    <div
-      className={`rounded-2xl px-2 py-3.5 mb-3.5 grid grid-cols-3 text-center text-theme-subtext transition select-none ${
+    <Root
+      {...(onBells ? { type: 'button' as const, onClick: onBells, 'aria-label': 'Сводка дня. Открыть звонки' } : {})}
+      className={`relative w-full rounded-2xl px-2 py-3.5 mb-3.5 grid grid-cols-3 text-center text-theme-subtext transition select-none ${onBells ? 'active:scale-[0.99]' : ''} ${
         currentThemeDef?.isLight
           ? 'bg-white/75 border border-slate-200/90 shadow-sm'
           : 'bg-[#141516]/75 border border-white/10 shadow-inner'
@@ -34,6 +38,7 @@ export function SummaryCardContent({ lessons, isLight = false }: { lessons: Less
           <span className={`font-bold font-unbounded text-theme-text ${item.value === 'Уточняется' ? 'text-[10px] sm:text-xs' : 'text-sm sm:text-base'} leading-tight max-w-full break-words tabular-nums`}>{item.value}</span>
         </div>
       ))}
-    </div>
+      {onBells && <Bell size={13} aria-hidden="true" className="absolute bottom-2 right-2.5 opacity-40" />}
+    </Root>
   );
 }
