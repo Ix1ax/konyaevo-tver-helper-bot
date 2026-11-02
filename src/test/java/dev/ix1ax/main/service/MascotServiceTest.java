@@ -3,11 +3,14 @@ package dev.ix1ax.main.service;
 import dev.ix1ax.main.bot.MessageSender;
 import dev.ix1ax.main.dto.DayScheduleDto;
 import dev.ix1ax.main.dto.LessonDto;
+import dev.ix1ax.main.model.DayOff;
 import dev.ix1ax.main.model.MascotProgress;
 import dev.ix1ax.main.model.UserSettings;
+import dev.ix1ax.main.repository.DayOffRepository;
 import dev.ix1ax.main.repository.MascotProgressRepository;
 import dev.ix1ax.main.repository.UserSettingsRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import java.time.*;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -83,6 +86,21 @@ class MascotServiceTest {
         lessonsOn("Понедельник", "Вторник", "Среда", "Четверг", "Пятница");
         // 30 декабря — среда, следующий учебный день после каникул — понедельник 11 января.
         assertEquals(2, visit(LocalDate.of(2026, 12, 30), LocalDate.of(2027, 1, 11)).getStreak());
+    }
+
+    @Test void publicHolidaysAndAdminDaysOffDoNotBreakTheStreak() {
+        // 4 ноября 2026 — среда, День народного единства: вторник и четверг идут подряд.
+        assertEquals(2, visit(LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 5)).getStreak());
+        assertEquals("День народного единства", mascot.state(42, LocalDate.of(2026, 11, 4)).dayOff());
+        assertFalse(mascot.state(42, LocalDate.of(2026, 11, 4)).studyDay());
+
+        saved.clear();
+        // Каникулы колледжа отмечает администратор: неделя без пар серию не гасит.
+        DayOffRepository days = mock(DayOffRepository.class);
+        when(days.findAll()).thenReturn(java.util.stream.IntStream.range(1, 6).mapToObj(i -> new DayOff(MON.plusDays(i))).toList());
+        ReflectionTestUtils.setField(mascot, "dayOffs", new DayOffService(days));
+        assertEquals(2, visit(MON, MON.plusDays(7)).getStreak());
+        assertEquals("Выходной", mascot.state(42, MON.plusDays(2)).dayOff());
     }
 
     @Test void deadStreakIsShownAsZeroUntilTheNextVisit() {
