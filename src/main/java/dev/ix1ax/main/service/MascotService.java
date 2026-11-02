@@ -282,6 +282,22 @@ public class MascotService {
         return opened;
     }
 
+    /** Текущая серия каждого пользователя для админки: та же проверка «огонёк жив», что и на экране Парыча. */
+    public record StreakRow(long chatId, int streak, int best, boolean countedToday, String look, int donated) {}
+
+    public List<StreakRow> streakRows(LocalDate today, Map<Long, UserSettings> users) {
+        List<StreakRow> rows = new ArrayList<>();
+        for (MascotProgress progress : repository.findAll()) {
+            LocalDate last = progress.getLastDay();
+            boolean counted = today.equals(last);
+            boolean alive = last != null && progress.getStreak() > 0 && (counted
+                    || studyDaysBetween(studyDays(users.get(progress.getChatId())), last, today) <= progress.getFreezes());
+            rows.add(new StreakRow(progress.getChatId(), alive ? progress.getStreak() : 0, progress.getBestStreak(), counted,
+                    progress.getLook(), progress.getDonatedStars()));
+        }
+        return rows;
+    }
+
     public String lookName(String id) {
         return LOOKS.stream().filter(look -> look.id().equals(id)).map(Look::name).findFirst().orElse(id);
     }

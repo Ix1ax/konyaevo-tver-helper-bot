@@ -7,6 +7,7 @@ import {
   Check,
   X,
   Search,
+  ShieldCheck,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme, THEMES } from '../context/ThemeContext';
@@ -28,6 +29,8 @@ export function ProfileView() {
     teachersData,
     refreshAll,
     refreshing,
+    isAdmin,
+    setActiveTab,
   } = useApp();
   const { theme, setTheme } = useTheme();
   const { user, haptic } = useTelegram();
@@ -94,6 +97,9 @@ export function ProfileView() {
           )}
         </div>
       </div>
+      {isAdmin && <button type="button" className="admin-entry surface" onClick={() => { haptic.impact('light'); setActiveTab('admin'); }}>
+        <ShieldCheck size={20} /><span><b>Админка</b><small>Активность, огонёк, поддержка, отзывы</small></span><ChevronRight size={18} />
+      </button>}
       <div className="flex items-center gap-4 mb-6">
         <div className="w-16 h-16 rounded-[22px] bg-blue-500 text-white font-unbounded text-2xl font-black shadow-lg shadow-blue-500/30 flex items-center justify-center shrink-0">
           {user?.photo_url ? (
