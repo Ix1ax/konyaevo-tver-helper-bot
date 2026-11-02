@@ -48,6 +48,8 @@ public class ScheduleApiController {
                 .tomorrowName(tomorrow)
                 .changesDate(changesDate)
                 .serverTime(OffsetDateTime.now(MOSCOW).toString())
+                .todayShort(!today.isBlank() && scheduleService.isShortDay(java.time.LocalDate.now(MOSCOW)))
+                .tomorrowShort(!tomorrow.isBlank() && scheduleService.isShortDay(java.time.LocalDate.now(MOSCOW).plusDays(1)))
                 .build();
 
         return ResponseEntity.ok(info);

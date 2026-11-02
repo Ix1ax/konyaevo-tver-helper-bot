@@ -18,4 +18,7 @@ public class InfoResponseDto {
     private String tomorrowName;
     private String changesDate;
     private String serverTime;
+    /** Сокращённые пары сегодня / завтра. */
+    private boolean todayShort;
+    private boolean tomorrowShort;
 }

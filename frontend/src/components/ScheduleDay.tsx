@@ -6,6 +6,8 @@ import { MascotTip } from './MascotTip';
 import { ShareButton } from './ShareButton';
 import { DAY_TABS, TabSwitch } from './TabSwitch';
 import { SupportCard } from './SupportParych';
+import { BellsSheet } from './Bells';
+import { useState } from 'react';
 import { ArrowRightLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -15,6 +17,8 @@ export function ScheduleDay({ tomorrow = false }: { tomorrow?: boolean }) {
   const red = tomorrow ? (info.tomorrowRedWeek ?? info.isRedWeek) : info.isRedWeek;
   const lessons = (schedule[day]?.lessons || []).filter((lesson) => !lesson.weekType || lesson.weekType === (red ? 'red' : 'blue'));
   const changed = lessons.some((lesson) => lesson.changed);
+  const short = Boolean(tomorrow ? info.tomorrowShort : info.todayShort);
+  const [bells, setBells] = useState(false);
   return <div className="page animate-fade-in">
     <Header title={tomorrow ? 'Завтра' : 'Сегодня'} showGreeting={!tomorrow} action={<ShareButton />} support />
     <TabSwitch items={DAY_TABS} />
@@ -30,8 +34,9 @@ export function ScheduleDay({ tomorrow = false }: { tomorrow?: boolean }) {
           <ChevronRight size={16} className="opacity-50" />
         </button>
       )}
-      <MascotTip lessons={lessons} role={role} tomorrow={tomorrow} />
-      <SummaryCard lessons={lessons} dayName={day} />
+      <MascotTip lessons={lessons} role={role} tomorrow={tomorrow} short={short} onBells={() => setBells(true)} />
+      <SummaryCard lessons={lessons} dayName={day} onBells={() => setBells(true)} />
+      {bells && <BellsSheet schedule={schedule} day={day} short={short} today={!tomorrow} onClose={() => setBells(false)} />}
       {lessons.length ? lessons.map((lesson, index) => <LessonCard key={`${lesson.lessonNumber}-${lesson.groupName}-${index}`} lesson={lesson} highlightCurrent={!tomorrow} />)
         : <EmptyState mascot>На этот день занятий не запланировано.</EmptyState>}
       {!tomorrow && <SupportCard />}

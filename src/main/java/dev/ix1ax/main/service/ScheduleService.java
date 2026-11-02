@@ -126,12 +126,22 @@ public class ScheduleService {
         return DAY_NAMES.getOrDefault(dow, "");
     }
 
+    /** Сокращённые пары; в тестах сервиса без Spring его нет. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ShortDayService shortDays;
+
+    public boolean isShortDay(LocalDate date) { return shortDays != null && shortDays.isShort(date); }
+
+    private Map<String, DayScheduleDto> withShortDays(Map<String, DayScheduleDto> week) {
+        return shortDays == null ? week : shortDays.apply(week, LocalDate.now(MOSCOW), getTodayName(), getTomorrowName());
+    }
+
     public Map<String, DayScheduleDto> getResolvedGroupSchedule(String groupName) {
-        return resolver.getScheduleForGroup(groupName);
+        return withShortDays(resolver.getScheduleForGroup(groupName));
     }
 
     public Map<String, DayScheduleDto> getResolvedTeacherSchedule(String teacherName) {
-        return resolver.getScheduleForTeacher(teacherName);
+        return withShortDays(resolver.getScheduleForTeacher(teacherName));
     }
 
     public Map<String, DayScheduleDto> getBaseGroupSchedule(String groupName) {
@@ -149,7 +159,9 @@ public class ScheduleService {
     private String formatResolvedDay(String target, String dayName, boolean forTeacher, DayScheduleDto day) {
         LocalDate date = LocalDate.now(MOSCOW);
         if (dayName.equals(getTomorrowName())) date = date.plusDays(1);
-        return formatResolvedDay(target, dayName, forTeacher, day, AcademicWeek.typeFor(date));
+        String text = formatResolvedDay(target, dayName, forTeacher, day, AcademicWeek.typeFor(date));
+        // Под заголовком дня: время пар в тексте уже сокращённое.
+        return isShortDay(date) ? text.replaceFirst("\n\n", "\n⏱ <b>Сокращённые пары</b> — по 60 минут\n\n") : text;
     }
 
     private String formatResolvedDay(String target, String dayName, boolean forTeacher, DayScheduleDto day, String weekType) {
