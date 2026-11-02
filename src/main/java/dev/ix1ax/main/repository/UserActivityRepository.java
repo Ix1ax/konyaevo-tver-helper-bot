@@ -14,5 +14,8 @@ public interface UserActivityRepository extends Repository<UserSettings, Long> {
     int touch(@Param("id") long id, @Param("now") Instant now);
 
     long countByLastActiveGreaterThanEqual(Instant since);
+
+    @Query("SELECT u.chatId FROM UserSettings u WHERE u.lastActive >= :since")
+    java.util.List<Long> activeSince(@Param("since") Instant since);
     long countByFirstSeenGreaterThanEqual(Instant since);
 }
